@@ -341,3 +341,10 @@ async def test_send_keyboard_raw(client):
     with aioresponses() as m:
         m.post(f"{BASE}/controls/keyboard-raw/16", status=200)
         await client.async_send_keyboard_raw(16)
+
+
+def test_ssh_defaults_exported():
+    from mister_fpga import DEFAULT_SSH_PORT, DEFAULT_SSH_USERNAME, SSH_PROBE_CMD
+    assert DEFAULT_SSH_PORT == 22
+    assert DEFAULT_SSH_USERNAME == "root"
+    assert "CORENAME" in SSH_PROBE_CMD
