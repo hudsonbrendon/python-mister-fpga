@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "python-mister-fpga"
-version = "0.1.1"
+version = "0.1.2"
 description = "Async Python client for the MiSTer FPGA mrext Remote API (REST + WebSocket) and SSH telemetry"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,10 +24,12 @@ dependencies = ["aiohttp>=3.9", "asyncssh>=2.21"]
 
 [project.urls]
 Homepage = "https://github.com/hudsonbrendon/python-mister-fpga"
+Documentation = "https://hudsonbrendon.github.io/python-mister-fpga/"
 Issues = "https://github.com/hudsonbrendon/python-mister-fpga/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-asyncio>=0.23", "aioresponses>=0.7", "ruff"]
+docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mister_fpga"]

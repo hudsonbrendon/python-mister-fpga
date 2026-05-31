@@ -11,6 +11,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/python-mister-fpga)](https://pypi.org/project/python-mister-fpga/)
 [![Python versions](https://img.shields.io/pypi/pyversions/python-mister-fpga)](https://pypi.org/project/python-mister-fpga/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-mkdocs--material-blue)](https://hudsonbrendon.github.io/python-mister-fpga/)
 
 Async Python client for the [mrext Remote API](https://github.com/wizzomafizzo/mrext) (REST + WebSocket) and optional SSH telemetry for the MiSTer FPGA. Zero Home Assistant dependency — use it in any Python project.
 
@@ -85,6 +86,10 @@ asyncio.run(main())
 - **`MisterSSH(host, port, username, password)`** — persistent asyncssh connection; `await ssh.async_probe()` returns telemetry dict.
 - **`parse_ssh_probe(raw)`** — parse the raw batched SSH output into a telemetry dict.
 - **`KEYBOARD_NAMES`**, **`INI_VIDEO_KEYS`**, **`WS_PATH`**, **`DEFAULT_PORT`** — protocol constants.
+
+## Documentation
+
+Full documentation is available at **https://hudsonbrendon.github.io/python-mister-fpga/** — usage guide, runnable examples, and auto-generated API reference.
 
 ## Credits
 
