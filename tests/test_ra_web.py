@@ -4,6 +4,7 @@ import re
 import pytest
 from aioresponses import aioresponses
 
+import mister_fpga
 from mister_fpga.const import (
     RA_WEB_API_BASE,
     RA_WEB_DEFAULT_ACHIEVEMENT_MINUTES,
@@ -249,3 +250,12 @@ async def test_validate_success_and_failure():
         with pytest.raises(MisterRAWebError):
             await web.async_validate()
         await web.async_close()
+
+
+def test_top_level_exports():
+    assert mister_fpga.__version__ == "0.2.0"
+    assert hasattr(mister_fpga, "MisterRAWeb")
+    assert hasattr(mister_fpga, "MisterRAWebError")
+    assert hasattr(mister_fpga, "MisterRAWebStats")
+    assert hasattr(mister_fpga, "RAGameProgress")
+    assert hasattr(mister_fpga, "RAAchievement")

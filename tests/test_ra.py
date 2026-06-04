@@ -160,4 +160,4 @@ def test_public_exports():
     assert hasattr(mister_fpga, "MisterRAStatus")
     assert hasattr(mister_fpga, "MisterRAError")
     assert hasattr(mister_fpga, "RA_SUPPORTED_SYSTEMS")
-    assert mister_fpga.__version__ == "0.1.3"
+    assert mister_fpga.__version__ == "0.2.0"
