@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+- Add `MisterRAWeb` — async client for the [RetroAchievements.org Web API](https://api.docs.retroachievements.org/) to pull cloud player stats (points, rank, recently-played games, latest unlocked achievement) without SSH.
+- New dataclasses `MisterRAWebStats`, `RAGameProgress`, `RAAchievement` for aggregated cloud-stats snapshots.
+- New exception `MisterRAWebError` raised on network, HTTP, or API-level failures (including bad credentials).
+
 ## 0.1.2
 - Add online documentation (MkDocs Material) at https://hudsonbrendon.github.io/python-mister-fpga/ and enrich public-API docstrings.
 

@@ -81,12 +81,16 @@ asyncio.run(main())
 `MisterRAWeb` queries the public [RetroAchievements.org Web API](https://api.docs.retroachievements.org/) to pull a player's points, rank, recently-played games, and latest unlocked achievement — no SSH required.  You need a **Web API key** from [retroachievements.org/settings](https://retroachievements.org/settings).
 
 ```python
+import asyncio
 from mister_fpga import MisterRAWeb
 
-web = MisterRAWeb("myuser", "my_api_key")
-stats = await web.async_fetch_stats()
-print(stats.hardcore_points, stats.rank, stats.current_game)
-await web.async_close()
+async def main():
+    web = MisterRAWeb("myuser", "my_api_key")
+    stats = await web.async_fetch_stats()
+    print(stats.hardcore_points, stats.rank, stats.current_game)
+    await web.async_close()
+
+asyncio.run(main())
 ```
 
 ### `MisterRAWeb(username, api_key, *, session=None, timeout=15)`

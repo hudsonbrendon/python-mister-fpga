@@ -1,6 +1,7 @@
 """Tests for the RetroAchievements Web API module."""
 import re
 
+import aiohttp
 import pytest
 from aioresponses import aioresponses
 
@@ -259,3 +260,45 @@ def test_top_level_exports():
     assert hasattr(mister_fpga, "MisterRAWebStats")
     assert hasattr(mister_fpga, "RAGameProgress")
     assert hasattr(mister_fpga, "RAAchievement")
+
+
+async def test_get_badge_image_returns_bytes():
+    url = "https://media.retroachievements.org/Badge/1.png"
+    with aioresponses() as m:
+        m.get(url, body=b"PNGDATA")
+        web = MisterRAWeb("user", "key")
+        data = await web.async_get_badge_image(url)
+        await web.async_close()
+    assert data == b"PNGDATA"
+
+
+async def test_get_badge_image_error_raises():
+    url = "https://media.retroachievements.org/Badge/1.png"
+    with aioresponses() as m:
+        m.get(url, status=404)
+        web = MisterRAWeb("user", "key")
+        with pytest.raises(MisterRAWebError):
+            await web.async_get_badge_image(url)
+        await web.async_close()
+
+
+def test_parse_rank_and_score_non_dict():
+    assert parse_rank_and_score(None) == (0, 0, None, None)
+    assert parse_rank_and_score([]) == (0, 0, None, None)
+
+
+async def test_request_error_payload_raises():
+    with aioresponses() as m:
+        m.get(_rank_url(), payload={"Error": "Invalid API Key"})
+        web = MisterRAWeb("user", "bad")
+        with pytest.raises(MisterRAWebError):
+            await web.async_get_rank_and_score()
+        await web.async_close()
+
+
+async def test_injected_session_not_closed():
+    session = aiohttp.ClientSession()
+    web = MisterRAWeb("user", "key", session=session)
+    await web.async_close()
+    assert not session.closed
+    await session.close()
