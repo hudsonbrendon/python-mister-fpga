@@ -1,7 +1,7 @@
 """Protocol constants for the MiSTer FPGA mrext Remote API."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 DEFAULT_PORT = 8182
 HTTP_TIMEOUT = 10
@@ -96,3 +96,50 @@ class MisterRAStatus:
     username: str | None = None
     cores_active: int = 0
     cores_total: int = 0
+
+
+# RetroAchievements Web API (cloud player stats) ------------------------------
+
+RA_WEB_API_BASE = "https://retroachievements.org/API/"
+RA_WEB_IMAGE_BASE = "https://media.retroachievements.org"
+RA_WEB_DEFAULT_RECENT_COUNT = 10
+RA_WEB_DEFAULT_ACHIEVEMENT_MINUTES = 10080  # 7 days, in minutes
+
+
+@dataclass
+class RAGameProgress:
+    """Per-game achievement progress from the RA Web API."""
+
+    game_id: int
+    title: str
+    console: str
+    num_achieved: int = 0
+    num_possible: int = 0
+    percent: float = 0.0
+    last_played: str | None = None
+    icon_url: str | None = None
+
+
+@dataclass
+class RAAchievement:
+    """A single unlocked achievement from the RA Web API."""
+
+    title: str
+    description: str
+    points: int
+    game_title: str
+    date: str | None = None
+    badge_url: str | None = None
+
+
+@dataclass
+class MisterRAWebStats:
+    """Aggregated RetroAchievements cloud player stats."""
+
+    hardcore_points: int = 0
+    softcore_points: int = 0
+    rank: int | None = None
+    total_ranked: int | None = None
+    current_game: RAGameProgress | None = None
+    recent_games: list[RAGameProgress] = field(default_factory=list)
+    last_achievement: RAAchievement | None = None
