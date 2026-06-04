@@ -1,4 +1,9 @@
 """Tests for the RetroAchievements Web API module."""
+import re
+
+import pytest
+from aioresponses import aioresponses
+
 from mister_fpga.const import (
     RA_WEB_API_BASE,
     RA_WEB_DEFAULT_ACHIEVEMENT_MINUTES,
@@ -9,6 +14,8 @@ from mister_fpga.const import (
     RAGameProgress,
 )
 from mister_fpga.ra_web import (
+    MisterRAWeb,
+    MisterRAWebError,
     parse_rank_and_score,
     parse_recent_achievements,
     parse_recently_played,
@@ -136,3 +143,109 @@ def test_parse_recent_achievements_prefers_badge_url_then_builds_from_name():
 
 def test_parse_recent_achievements_empty():
     assert parse_recent_achievements([]) == []
+
+
+def _rank_url():
+    return re.compile(r"https://retroachievements\.org/API/API_GetUserRankAndScore\.php.*")
+
+
+def _recent_games_url():
+    return re.compile(
+        r"https://retroachievements\.org/API/API_GetUserRecentlyPlayedGames\.php.*"
+    )
+
+
+def _recent_ach_url():
+    return re.compile(
+        r"https://retroachievements\.org/API/API_GetUserRecentAchievements\.php.*"
+    )
+
+
+async def test_fetch_stats_assembles_all():
+    with aioresponses() as m:
+        m.get(
+            _rank_url(),
+            payload={"Score": 100, "SoftcoreScore": 20, "Rank": 5, "TotalRanked": 999},
+        )
+        m.get(
+            _recent_games_url(),
+            payload=[
+                {
+                    "GameID": 1,
+                    "Title": "Mario",
+                    "ConsoleName": "NES",
+                    "NumAchieved": 3,
+                    "NumPossibleAchievements": 6,
+                }
+            ],
+        )
+        m.get(
+            _recent_ach_url(),
+            payload=[
+                {
+                    "Title": "Win",
+                    "Description": "d",
+                    "Points": 10,
+                    "GameTitle": "Mario",
+                    "Date": "2024-01-01 00:00:00",
+                    "BadgeName": "111",
+                }
+            ],
+        )
+        web = MisterRAWeb("user", "key")
+        try:
+            stats = await web.async_fetch_stats()
+        finally:
+            await web.async_close()
+
+    assert stats.hardcore_points == 100
+    assert stats.softcore_points == 20
+    assert stats.rank == 5
+    assert stats.total_ranked == 999
+    assert stats.current_game.title == "Mario"
+    assert stats.current_game.percent == 50.0
+    assert len(stats.recent_games) == 1
+    assert stats.last_achievement.title == "Win"
+
+
+async def test_fetch_stats_empty_lists_yield_none():
+    with aioresponses() as m:
+        m.get(_rank_url(), payload={"Score": 0, "SoftcoreScore": 0})
+        m.get(_recent_games_url(), payload=[])
+        m.get(_recent_ach_url(), payload=[])
+        web = MisterRAWeb("user", "key")
+        try:
+            stats = await web.async_fetch_stats()
+        finally:
+            await web.async_close()
+    assert stats.current_game is None
+    assert stats.recent_games == []
+    assert stats.last_achievement is None
+
+
+async def test_fetch_stats_http_error_raises():
+    with aioresponses() as m:
+        m.get(_rank_url(), status=500)
+        m.get(_recent_games_url(), payload=[])
+        m.get(_recent_ach_url(), payload=[])
+        web = MisterRAWeb("user", "key")
+        with pytest.raises(MisterRAWebError):
+            try:
+                await web.async_fetch_stats()
+            finally:
+                await web.async_close()
+
+
+async def test_validate_success_and_failure():
+    with aioresponses() as m:
+        m.get(_rank_url(), payload={"Score": 1})
+        web = MisterRAWeb("user", "key")
+        await web.async_validate()  # no raise
+        await web.async_close()
+
+    with aioresponses() as m:
+        m.get(_rank_url(), status=401)
+        web = MisterRAWeb("user", "bad")
+        with pytest.raises(MisterRAWebError):
+            await web.async_validate()
+        await web.async_close()
