@@ -13,3 +13,13 @@
 ::: mister_fpga.parse_ssh_probe
 
 ::: mister_fpga.MisterConnectionError
+
+::: mister_fpga.MisterRAWeb
+
+::: mister_fpga.MisterRAWebStats
+
+::: mister_fpga.RAGameProgress
+
+::: mister_fpga.RAAchievement
+
+::: mister_fpga.MisterRAWebError

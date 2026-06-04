@@ -76,6 +76,70 @@ async def main():
 asyncio.run(main())
 ```
 
+## RetroAchievements cloud stats
+
+`MisterRAWeb` queries the public [RetroAchievements.org Web API](https://api.docs.retroachievements.org/) to pull a player's points, rank, recently-played games, and latest unlocked achievement — no SSH required.  You need a **Web API key** from [retroachievements.org/settings](https://retroachievements.org/settings).
+
+```python
+from mister_fpga import MisterRAWeb
+
+web = MisterRAWeb("myuser", "my_api_key")
+stats = await web.async_fetch_stats()
+print(stats.hardcore_points, stats.rank, stats.current_game)
+await web.async_close()
+```
+
+### `MisterRAWeb(username, api_key, *, session=None, timeout=15)`
+
+Async HTTPS client for the RA Web API.  When `session` is `None` the client creates its own `aiohttp.ClientSession`; call `await web.async_close()` to release it.  Pass a shared session to manage its lifetime yourself.
+
+| Method | Description |
+|---|---|
+| `await async_fetch_stats() -> MisterRAWebStats` | Fire all three API calls concurrently and return an aggregated stats snapshot. |
+| `await async_validate()` | Lightweight credential check — raises `MisterRAWebError` if the username or API key is wrong. |
+| `await async_get_badge_image(url) -> bytes` | Fetch a badge or icon image by absolute URL (e.g. `stats.last_achievement.badge_url`). |
+| `await async_close()` | Close the session if this client created it. |
+
+### Dataclasses
+
+**`MisterRAWebStats`** — aggregated snapshot returned by `async_fetch_stats()`:
+
+| Field | Type | Description |
+|---|---|---|
+| `hardcore_points` | `int` | Total hardcore score. |
+| `softcore_points` | `int` | Total softcore score. |
+| `rank` | `int \| None` | Global hardcore rank (None if unranked). |
+| `total_ranked` | `int \| None` | Total number of ranked players. |
+| `current_game` | `RAGameProgress \| None` | Most recently played game (first entry in the recent-games list). |
+| `recent_games` | `list[RAGameProgress]` | Up to 10 recently played games, most-recent first. |
+| `last_achievement` | `RAAchievement \| None` | Most recently unlocked achievement (within the last 7 days). |
+
+**`RAGameProgress`** — per-game achievement progress:
+
+| Field | Type | Description |
+|---|---|---|
+| `game_id` | `int` | RA game ID. |
+| `title` | `str` | Game title. |
+| `console` | `str` | Console name (e.g. `"SNES"`). |
+| `num_achieved` | `int` | Achievements unlocked by the player. |
+| `num_possible` | `int` | Total achievements in the set. |
+| `percent` | `float` | Completion percentage (0–100). |
+| `last_played` | `str \| None` | ISO-ish timestamp of last session. |
+| `icon_url` | `str \| None` | Absolute URL of the game icon. |
+
+**`RAAchievement`** — a single unlocked achievement:
+
+| Field | Type | Description |
+|---|---|---|
+| `title` | `str` | Achievement title. |
+| `description` | `str` | Achievement description. |
+| `points` | `int` | Point value. |
+| `game_title` | `str` | Title of the game it belongs to. |
+| `date` | `str \| None` | Unlock timestamp. |
+| `badge_url` | `str \| None` | Absolute URL of the badge image. |
+
+**`MisterRAWebError`** — raised by `MisterRAWeb` on network failures, HTTP errors, or API-level errors (including bad credentials).
+
 ## API
 
 - **`MisterClient(host, port=8182, *, session=None, timeout=10)`** — async REST client; call `await client.async_close()` when done, or inject your own `aiohttp.ClientSession`.
@@ -85,6 +149,9 @@ asyncio.run(main())
 - **`apply_ws_message(message, status, menu_path, index_state)`** — pure reducer; apply a single WS text frame and return updated `(status, menu_path, index_state)`.
 - **`MisterSSH(host, port, username, password)`** — persistent asyncssh connection; `await ssh.async_probe()` returns telemetry dict.
 - **`parse_ssh_probe(raw)`** — parse the raw batched SSH output into a telemetry dict.
+- **`MisterRAWeb(username, api_key, *, session=None, timeout=15)`** — async RA Web API client; `await web.async_fetch_stats()` returns `MisterRAWebStats`.
+- **`MisterRAWebStats`**, **`RAGameProgress`**, **`RAAchievement`** — cloud-stats dataclasses (see section above).
+- **`MisterRAWebError`** — raised on RA Web API failures.
 - **`KEYBOARD_NAMES`**, **`INI_VIDEO_KEYS`**, **`WS_PATH`**, **`DEFAULT_PORT`** — protocol constants.
 
 ## Documentation
