@@ -1,6 +1,8 @@
 """Protocol constants for the MiSTer FPGA mrext Remote API."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 DEFAULT_PORT = 8182
 HTTP_TIMEOUT = 10
 
@@ -60,3 +62,37 @@ KEYBOARD_NAMES = (
     "reset", "screenshot", "raw_screenshot", "console", "exit_console",
     "computer_osd", "change_background", "pair_bluetooth", "toggle_core_dates",
 )
+
+# RetroAchievements (local, via SSH helper scripts) ------------------------
+
+# mrext system keys for cores with odelot RA-modified builds.
+RA_SUPPORTED_SYSTEMS = (
+    "NES", "FDS", "SNES", "MegaDrive", "SMS", "Gameboy", "N64", "PSX",
+    "GBA", "MegaCD", "NeoGeo", "TurboGrafx16", "Atari2600", "Atari7800", "S32X",
+)
+
+# Placeholder written by the RA installer before the user fills credentials.
+RA_USERNAME_PLACEHOLDER = "YOUR_RA_USERNAME"
+
+# One-shot SSH command emitting parseable RA state. Combines an install probe,
+# the username from the cfg, and ra_status.sh output.
+RA_STATUS_CMD = (
+    "if [ -d /media/fat/_RA_Cores ]; then echo installed=1; "
+    "else echo installed=0; fi; "
+    "echo \"username=$(sed -n 's/^username=//p' "
+    "/media/fat/retroachievements.cfg 2>/dev/null | head -1)\"; "
+    "bash /media/fat/Scripts/.ra/ra_status.sh 2>/dev/null"
+)
+
+
+@dataclass
+class MisterRAStatus:
+    """Parsed RetroAchievements local state."""
+
+    installed: bool = False
+    cores_on: bool = False
+    binary_ra: bool = False
+    hardcore: bool = False
+    username: str | None = None
+    cores_active: int = 0
+    cores_total: int = 0
