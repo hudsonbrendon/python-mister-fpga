@@ -1,5 +1,8 @@
 """Tests for the RetroAchievements local module."""
+import pytest
+
 from mister_fpga.const import RA_SUPPORTED_SYSTEMS, MisterRAStatus
+from mister_fpga.ra import MisterRA, MisterRAError, parse_ra_status
 
 
 def test_ra_status_defaults():
@@ -18,8 +21,6 @@ def test_supported_systems_contains_core_keys():
     assert "SNES" in RA_SUPPORTED_SYSTEMS
     assert "PSX" in RA_SUPPORTED_SYSTEMS
 
-
-from mister_fpga.ra import parse_ra_status
 
 _STATUS_ON = """installed=1
 username=hudsonbrendon
@@ -87,11 +88,6 @@ def test_parse_malformed_does_not_crash():
     s = parse_ra_status("garbage\n\nnonsense line")
     assert s.installed is False
     assert s.cores_total == 0
-
-
-import pytest
-
-from mister_fpga.ra import MisterRA, MisterRAError
 
 
 class _FakeSSH:
