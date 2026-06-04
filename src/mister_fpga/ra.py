@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 
-from .const import RA_USERNAME_PLACEHOLDER, MisterRAStatus
+from .const import RA_STATUS_CMD, RA_USERNAME_PLACEHOLDER, MisterRAStatus
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,3 +45,38 @@ def parse_ra_status(raw: str) -> MisterRAStatus:
     status.cores_total = total
     status.cores_active = active
     return status
+
+
+class MisterRAError(Exception):
+    """A RetroAchievements control command failed."""
+
+
+class MisterRA:
+    """RetroAchievements local control sharing a MisterSSH connection."""
+
+    def __init__(self, ssh) -> None:
+        self._ssh = ssh
+
+    async def async_status(self) -> MisterRAStatus | None:
+        """Probe RA state. Returns None only on SSH failure (best-effort)."""
+        try:
+            _rc, out = await self._ssh.async_run(RA_STATUS_CMD, timeout=15)
+        except Exception as err:  # noqa: BLE001 - best-effort; never break the integration
+            _LOGGER.debug("RA status probe failed: %s", err)
+            return None
+        return parse_ra_status(out)
+
+    async def async_cores_on(self) -> None:
+        await self._run_checked("bash /media/fat/Scripts/.ra/ra_on.sh")
+
+    async def async_cores_off(self) -> None:
+        await self._run_checked("bash /media/fat/Scripts/.ra/ra_off.sh")
+
+    async def async_set_hardcore(self, enabled: bool) -> None:
+        arg = "on" if enabled else "off"
+        await self._run_checked(f"bash /media/fat/Scripts/.ra/ra_hardcore.sh {arg}")
+
+    async def _run_checked(self, command: str) -> None:
+        rc, out = await self._ssh.async_run(command, timeout=30)
+        if rc != 0:
+            raise MisterRAError(f"command failed (rc={rc}): {command}\n{out}")

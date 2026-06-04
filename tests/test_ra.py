@@ -87,3 +87,71 @@ def test_parse_malformed_does_not_crash():
     s = parse_ra_status("garbage\n\nnonsense line")
     assert s.installed is False
     assert s.cores_total == 0
+
+
+import pytest
+
+from mister_fpga.ra import MisterRA, MisterRAError
+
+
+class _FakeSSH:
+    def __init__(self, rc=0, out=""):
+        self._rc = rc
+        self._out = out
+        self.commands = []
+
+    async def async_run(self, command, timeout=15):
+        self.commands.append(command)
+        return self._rc, self._out
+
+
+class _RaisingSSH:
+    async def async_run(self, command, timeout=15):
+        raise OSError("ssh down")
+
+
+@pytest.mark.asyncio
+async def test_async_status_parses():
+    ssh = _FakeSSH(out=_STATUS_ON)
+    ra = MisterRA(ssh)
+    status = await ra.async_status()
+    assert status is not None
+    assert status.cores_on is True
+    assert status.username == "hudsonbrendon"
+
+
+@pytest.mark.asyncio
+async def test_async_status_none_on_ssh_failure():
+    ra = MisterRA(_RaisingSSH())
+    assert await ra.async_status() is None
+
+
+@pytest.mark.asyncio
+async def test_cores_on_off_commands():
+    ssh = _FakeSSH()
+    ra = MisterRA(ssh)
+    await ra.async_cores_on()
+    await ra.async_cores_off()
+    assert ssh.commands == [
+        "bash /media/fat/Scripts/.ra/ra_on.sh",
+        "bash /media/fat/Scripts/.ra/ra_off.sh",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_set_hardcore_arg():
+    ssh = _FakeSSH()
+    ra = MisterRA(ssh)
+    await ra.async_set_hardcore(True)
+    await ra.async_set_hardcore(False)
+    assert ssh.commands == [
+        "bash /media/fat/Scripts/.ra/ra_hardcore.sh on",
+        "bash /media/fat/Scripts/.ra/ra_hardcore.sh off",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_control_raises_on_nonzero():
+    ra = MisterRA(_FakeSSH(rc=1, out="fail"))
+    with pytest.raises(MisterRAError):
+        await ra.async_cores_on()
