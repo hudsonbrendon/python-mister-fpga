@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "python-mister-fpga"
-version = "0.1.2"
+version = "0.1.3"
 description = "Async Python client for the MiSTer FPGA mrext Remote API (REST + WebSocket) and SSH telemetry"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,6 +1,7 @@
 """Optional SSH telemetry client for the MiSTer FPGA."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from .const import SSH_PROBE_CMD
@@ -86,6 +87,7 @@ class MisterSSH:
         self.username = username
         self.password = password
         self._conn = None
+        self._lock = asyncio.Lock()
 
     async def _ensure(self) -> None:
         if self._conn is not None:
@@ -100,20 +102,28 @@ class MisterSSH:
             known_hosts=None,
         )
 
-    async def async_probe(self) -> dict:
-        """Run the SSH probe command and return parsed telemetry.
+    async def async_run(self, command: str, timeout: int = 15) -> tuple[int, str]:
+        """Run a command over the shared SSH connection.
 
-        Returns:
-            Telemetry dict as returned by :func:`parse_ssh_probe`, or ``{}``
-            if the SSH connection or command fails.
+        Returns ``(exit_status, stdout)``. Raises on connection/transport
+        failure (callers that need best-effort behaviour must catch).
         """
+        async with self._lock:
+            try:
+                await self._ensure()
+                result = await self._conn.run(command, check=False, timeout=timeout)
+            except Exception:
+                self._conn = None
+                raise
+            return result.exit_status or 0, result.stdout or ""
+
+    async def async_probe(self) -> dict:
+        """Run the SSH probe command and return parsed telemetry."""
         try:
-            await self._ensure()
-            result = await self._conn.run(SSH_PROBE_CMD, check=False, timeout=10)
-            return parse_ssh_probe(result.stdout or "")
-        except Exception as err:  # noqa: BLE001 - asyncssh raises many types; SSH is best-effort and must never break the HTTP integration
+            _rc, out = await self.async_run(SSH_PROBE_CMD, timeout=10)
+            return parse_ssh_probe(out)
+        except Exception as err:  # noqa: BLE001 - SSH is best-effort; never break the HTTP integration
             _LOGGER.debug("MiSTer SSH probe failed: %s", err)
-            self._conn = None
             return {}
 
     async def async_close(self) -> None:
