@@ -154,12 +154,12 @@ class MisterRAWeb:
                     raise MisterRAWebError(
                         f"{endpoint} returned invalid JSON: {err}"
                     ) from err
+                if isinstance(data, dict) and data.get("Error"):
+                    raise MisterRAWebError(f"{endpoint} error: {data['Error']}")
+                return data
         except (TimeoutError, aiohttp.ClientError) as err:
             _LOGGER.debug("RA Web request %s failed: %s", endpoint, err)
             raise MisterRAWebError(f"{endpoint} failed: {err}") from err
-        if isinstance(data, dict) and data.get("Error"):
-            raise MisterRAWebError(f"{endpoint} error: {data['Error']}")
-        return data
 
     async def async_get_rank_and_score(self) -> dict:
         return await self._request("API_GetUserRankAndScore.php", {})

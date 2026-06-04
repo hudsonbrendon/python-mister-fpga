@@ -28,7 +28,14 @@ Documentation = "https://hudsonbrendon.github.io/python-mister-fpga/"
 Issues = "https://github.com/hudsonbrendon/python-mister-fpga/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8", "pytest-asyncio>=0.23", "aioresponses>=0.7", "aiohttp<3.10", "ruff"]
+test = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "aioresponses>=0.7",
+  # aiohttp<3.10: aioresponses 0.7.8 uses the removed loop= param in StreamReader
+  "aiohttp<3.10",
+  "ruff",
+]
 docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 
 [tool.hatch.build.targets.wheel]
