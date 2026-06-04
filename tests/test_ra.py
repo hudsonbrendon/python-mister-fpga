@@ -155,3 +155,13 @@ async def test_control_raises_on_nonzero():
     ra = MisterRA(_FakeSSH(rc=1, out="fail"))
     with pytest.raises(MisterRAError):
         await ra.async_cores_on()
+
+
+def test_public_exports():
+    import mister_fpga
+
+    assert hasattr(mister_fpga, "MisterRA")
+    assert hasattr(mister_fpga, "MisterRAStatus")
+    assert hasattr(mister_fpga, "MisterRAError")
+    assert hasattr(mister_fpga, "RA_SUPPORTED_SYSTEMS")
+    assert mister_fpga.__version__ == "0.1.3"
