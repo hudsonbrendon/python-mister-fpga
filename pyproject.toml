@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "python-mister-fpga"
-version = "0.1.3"
+version = "0.2.0"
 description = "Async Python client for the MiSTer FPGA mrext Remote API (REST + WebSocket) and SSH telemetry"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,7 +28,14 @@ Documentation = "https://hudsonbrendon.github.io/python-mister-fpga/"
 Issues = "https://github.com/hudsonbrendon/python-mister-fpga/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8", "pytest-asyncio>=0.23", "aioresponses>=0.7", "ruff"]
+test = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "aioresponses>=0.7",
+  # aiohttp<3.10: aioresponses 0.7.8 uses the removed loop= param in StreamReader
+  "aiohttp<3.10",
+  "ruff",
+]
 docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 
 [tool.hatch.build.targets.wheel]

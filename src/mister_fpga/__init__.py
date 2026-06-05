@@ -12,8 +12,12 @@ from .const import (
     SSH_PROBE_CMD,
     WS_PATH,
     MisterRAStatus,
+    MisterRAWebStats,
+    RAAchievement,
+    RAGameProgress,
 )
 from .ra import MisterRA, MisterRAError, parse_ra_status
+from .ra_web import MisterRAWeb, MisterRAWebError
 from .ssh import MisterSSH, parse_ssh_probe
 from .websocket import MisterWebSocketClient, apply_ws_message
 
@@ -24,11 +28,16 @@ __all__ = [
     "MisterRA",
     "MisterRAError",
     "MisterRAStatus",
+    "MisterRAWeb",
+    "MisterRAWebError",
+    "MisterRAWebStats",
     "MisterWebSocketClient",
     "apply_ws_message",
     "MisterSSH",
     "parse_ra_status",
     "parse_ssh_probe",
+    "RAAchievement",
+    "RAGameProgress",
     "KEYBOARD_NAMES",
     "INI_VIDEO_KEYS",
     "RA_STATUS_CMD",
@@ -40,4 +49,4 @@ __all__ = [
     "DEFAULT_SSH_USERNAME",
     "SSH_PROBE_CMD",
 ]
-__version__ = "0.1.3"
+__version__ = "0.2.0"
