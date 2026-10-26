@@ -41,17 +41,15 @@ def parse_ssh_probe(raw: str) -> dict:
         * ``cpu_load_1m`` (``float | None``) — 1-minute load average.
         * ``memory_used_percent`` (``float | None``) — RAM usage 0–100.
         * ``firmware_timestamp`` (``int | None``) — mtime of the MiSTer binary.
-        * ``cmd_fifo_pending`` (``int | None``) — bytes Main has not read from
-          ``/dev/MiSTer_cmd``.  Non-zero on two consecutive probes means Main
-          is hung (e.g. a core stopped answering the SPI handshake).
-        * ``main_open_fds`` (``int | None``) — open descriptors of the Main
-          process.  Some builds leak one per core load; 1024 is the limit.
+        * ``cmd_fifo_pending`` (``int | None``) — bytes Main has not read
+          from ``/dev/MiSTer_cmd``; non-zero on two probes means Main is hung.
+        * ``main_open_fds`` (``int | None``) — open descriptors of Main
+          (some builds leak one per core load; the limit is 1024).
         * ``volume`` (``int | None``) — 0-7, 7 loudest.
         * ``muted`` (``bool | None``).
-        * ``game_id`` (``str | None``) — CRC32 or disc serial of the loaded game.
+        * ``game_id`` (``str | None``) — CRC32 or disc serial of the game.
         * ``sam_active`` (``bool | None``) — Super Attract Mode is cycling.
-        * ``sam_game`` (``str | None``) — game SAM is showing, e.g.
-          ``"Breakers (neogeo)"``.
+        * ``sam_game`` (``str | None``) — game SAM shows, e.g. ``Breakers (neogeo)``.
     """
     parts = [p.strip() for p in raw.split(_SEP)]
     while len(parts) < 11:
