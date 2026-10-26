@@ -41,15 +41,17 @@ def parse_ssh_probe(raw: str) -> dict:
         * ``cpu_load_1m`` (``float | None``) — 1-minute load average.
         * ``memory_used_percent`` (``float | None``) — RAM usage 0–100.
         * ``firmware_timestamp`` (``int | None``) — mtime of the MiSTer binary.
-        * ``cmd_fifo_pending`` (``int | None``) — bytes Main has not read
-          from ``/dev/MiSTer_cmd``; non-zero on two probes means Main is hung.
-        * ``main_open_fds`` (``int | None``) — open descriptors of Main
-          (some builds leak one per core load; the limit is 1024).
+        * ``cmd_fifo_pending`` (``int | None``) — unread command-FIFO bytes.
+        * ``main_open_fds`` (``int | None``) — open descriptors of Main.
         * ``volume`` (``int | None``) — 0-7, 7 loudest.
         * ``muted`` (``bool | None``).
         * ``game_id`` (``str | None``) — CRC32 or disc serial of the game.
         * ``sam_active`` (``bool | None``) — Super Attract Mode is cycling.
         * ``sam_game`` (``str | None``) — game SAM shows, e.g. ``Breakers (neogeo)``.
+
+        ``cmd_fifo_pending`` above zero on two probes in a row means Main is
+        hung (its loop also drains ``/dev/MiSTer_cmd``).  Some Main builds
+        leak one descriptor per core load; the limit is 1024.
     """
     parts = [p.strip() for p in raw.split(_SEP)]
     while len(parts) < 11:
