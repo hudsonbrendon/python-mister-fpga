@@ -90,3 +90,32 @@ async def main():
 
 asyncio.run(main())
 ```
+
+
+## Main health, volume and Super Attract Mode (SSH)
+
+```python
+data = await ssh.async_probe()
+data["cmd_fifo_pending"]  # >0 on two probes in a row: Main is hung
+data["volume"], data["muted"], data["game_id"], data["sam_game"]
+await ssh.async_set_volume(5)          # 0-7, never blocks on a hung Main
+await ssh.async_send_command("load_core /media/fat/menu.rbf")
+```
+
+## Virtual gamepad (MiSTer Companion Remote daemon, port 9191)
+
+```python
+from mister_fpga import MisterGamepad
+
+pad = MisterGamepad("192.168.1.50")
+await pad.async_press("start")         # a real controller press: works in cores, menu, SAM
+```
+
+## RetroAchievements events (odelot Main with `debug=1`)
+
+```python
+from mister_fpga import MisterRA
+
+ra = MisterRA(ssh)
+offset, events = await ra.async_read_log(0)   # login / game_identified / achievement / ...
+```

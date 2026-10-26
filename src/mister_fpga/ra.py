@@ -3,8 +3,66 @@ from __future__ import annotations
 
 import logging
 import re
+import shlex
 
 from .const import RA_STATUS_CMD, RA_USERNAME_PLACEHOLDER, MisterRAStatus
+
+RA_DEBUG_LOG = "/tmp/ra_debug.log"
+RA_CFG = "/media/fat/retroachievements.cfg"
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_LOG_PATTERNS = (
+    ("login", re.compile(
+        r"RA: LOGIN OK: (?P<user>.+?) \(hardcore: (?P<hardcore_points>\d+),"
+        r" softcore: (?P<softcore_points>\d+)\)"
+    )),
+    ("game_id", re.compile(r"RA:\s+ID: (?P<game_id>\d+)")),
+    ("game_title", re.compile(r"RA:\s+Title: (?P<title>.+)")),
+    ("achievement", re.compile(
+        r"RA: \*\*\* ACHIEVEMENT TRIGGERED: \[(?P<id>\d+)\] (?P<title>.+?)"
+        r"(?: [—-] (?P<description>.*?))?(?: \*\*\*)?$"
+    )),
+    ("leaderboard", re.compile(
+        r"RA: LEADERBOARD SUBMITTED: \[(?P<id>\d+)\] (?P<title>.+)"
+    )),
+    ("game_completed", re.compile(r"RA: \*\*\* GAME COMPLETED! \*\*\*")),
+    ("game_unload", re.compile(r"RA: --- Game Unload ---")),
+)
+
+
+def parse_ra_log(text: str) -> list[dict]:
+    """Turn ``/tmp/ra_debug.log`` lines into events.
+
+    odelot's Main only writes this log with ``debug=1`` in
+    ``retroachievements.cfg``.  ``game_id`` and ``game_title`` lines follow a
+    ``=== GAME IDENTIFIED ===`` header and are merged into one
+    ``game_identified`` event.
+
+    Returns:
+        Dicts with a ``type`` key (``login``, ``game_identified``,
+        ``achievement``, ``leaderboard``, ``game_completed``, ``game_unload``)
+        plus the captured fields; numeric fields are ints.
+    """
+    events: list[dict] = []
+    for raw in text.splitlines():
+        line = _ANSI.sub("", raw).strip()
+        for kind, pattern in _LOG_PATTERNS:
+            match = pattern.search(line)
+            if not match:
+                continue
+            data = {
+                k: int(v) if v is not None and v.isdigit() else v
+                for k, v in match.groupdict().items()
+            }
+            if kind == "game_id":
+                events.append({"type": "game_identified", **data})
+            elif kind == "game_title":
+                if events and events[-1]["type"] == "game_identified":
+                    events[-1].setdefault("title", data["title"])
+            else:
+                events.append({"type": kind, **data})
+            break
+    return events
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +133,37 @@ class MisterRA:
     async def async_set_hardcore(self, enabled: bool) -> None:
         arg = "on" if enabled else "off"
         await self._run_checked(f"bash /media/fat/Scripts/.ra/ra_hardcore.sh {arg}")
+
+    async def async_read_log(self, offset: int = 0) -> tuple[int, list[dict]]:
+        """Read new RA log events written since *offset*.
+
+        Returns:
+            ``(new_offset, events)``.  Pass ``new_offset`` back next time.  When
+            Main restarts the log is truncated; the offset then resets to 0.
+        """
+        cmd = (
+            f"S=$(stat -c %s {RA_DEBUG_LOG} 2>/dev/null || echo 0); echo $S; "
+            f"[ $S -ge {int(offset)} ] && O={int(offset)} || O=0; "
+            f"tail -c +$((O+1)) {RA_DEBUG_LOG} 2>/dev/null | head -c 262144"
+        )
+        _rc, out = await self._ssh.async_run(cmd, timeout=15)
+        size_s, _, body = out.partition("\n")
+        try:
+            size = int(size_s.strip())
+        except ValueError:
+            return offset, []
+        start = offset if size >= offset else 0
+        complete = body[: body.rfind("\n") + 1]  # keep partial line
+        return start + len(complete.encode()), parse_ra_log(complete)
+
+    async def async_set_debug(self, enabled: bool) -> None:
+        """Turn RA debug logging on/off (applies on the next core load)."""
+        value = "1" if enabled else "0"
+        cfg = shlex.quote(RA_CFG)
+        await self._run_checked(
+            f"grep -q '^debug=' {cfg} && sed -i 's/^debug=.*/debug={value}/' {cfg}"
+            f" || echo 'debug={value}' >> {cfg}"
+        )
 
     async def _run_checked(self, command: str) -> None:
         rc, out = await self._ssh.async_run(command, timeout=30)

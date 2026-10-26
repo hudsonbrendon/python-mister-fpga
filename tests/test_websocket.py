@@ -33,6 +33,10 @@ def test_menu_navigation_sets_path():
         "menuNavigation:_Console/SNES", status, None, (False, False)
     )
     assert menu == "_Console/SNES"
+    new, menu, idx = apply_ws_message(
+        "menuNavigation:/media/fat/games/SNES:Chrono.sfc", status, None, (False, False)
+    )
+    assert menu == "/media/fat/games/SNES/Chrono.sfc"
 
 
 def test_index_status_parsed():
@@ -78,3 +82,32 @@ def test_websocket_client_stop_sets_flag():
     assert ws._stop is False
     ws.stop()
     assert ws._stop is True
+
+
+def test_game_running_arcade_has_no_slash():
+    status = MisterStatus(online=True, core="sf2")
+    new, _, _ = apply_ws_message("gameRunning:sf2", status, None, (False, False))
+    assert new.game == "sf2"
+    assert new.game_name == "sf2"
+
+
+def test_core_change_clears_stale_system():
+    status = MisterStatus(
+        online=True, core="SNES", system="SNES", system_name="SNES",
+        game="SNES/a.sfc", game_name="a",
+    )
+    new, _, _ = apply_ws_message("coreRunning:GBA", status, None, (False, False))
+    assert new.core == "GBA"
+    assert new.system is None and new.game is None
+    same, _, _ = apply_ws_message("coreRunning:SNES", status, None, (False, False))
+    assert same is status
+
+
+def test_parse_index_status_progress():
+    from mister_fpga import parse_index_status
+
+    idx = parse_index_status("y,y,10,3,Indexing SNES, part 2")
+    assert idx.exists and idx.indexing
+    assert (idx.total_steps, idx.current_step) == (10, 3)
+    assert idx.description == "Indexing SNES, part 2"
+    assert parse_index_status("y,n,0,0,").indexing is False

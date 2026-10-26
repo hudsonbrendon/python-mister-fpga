@@ -3,20 +3,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 
-from .const import SSH_PROBE_CMD
+from .const import CMD_FIFO, SSH_PROBE_CMD
 
 _LOGGER = logging.getLogger(__name__)
 
 _SEP = "|||"
 
+# Runs on the MiSTer: one non-blocking write (<= PIPE_BUF, so all-or-EAGAIN).
+_FIFO_WRITE_PY = (
+    "import os,sys\n"
+    "try:\n"
+    f" f=os.open('{CMD_FIFO}',os.O_WRONLY|os.O_NONBLOCK)\n"
+    " os.write(f,sys.argv[1].encode()+b'\\n')\n"
+    "except OSError as e:\n"
+    " print(e); sys.exit(3)\n"
+)
+
 
 def parse_ssh_probe(raw: str) -> dict:
     """Parse the batched SSH probe output into a telemetry dict.
 
-    The probe command (``SSH_PROBE_CMD``) concatenates five fields separated by
-    ``|||``: active core name, uptime, load average, memory info, and firmware
-    timestamp.  Any missing or malformed field is silently coerced to ``None``.
+    The probe command (``SSH_PROBE_CMD``) concatenates eleven fields separated
+    by ``|||``.  Any missing or malformed field is silently coerced to
+    ``None``, so output from an older probe still parses.
 
     Args:
         raw: Raw stdout string returned by running ``SSH_PROBE_CMD`` on the
@@ -30,11 +41,23 @@ def parse_ssh_probe(raw: str) -> dict:
         * ``cpu_load_1m`` (``float | None``) — 1-minute load average.
         * ``memory_used_percent`` (``float | None``) — RAM usage 0–100.
         * ``firmware_timestamp`` (``int | None``) — mtime of the MiSTer binary.
+        * ``cmd_fifo_pending`` (``int | None``) — bytes Main has not read from
+          ``/dev/MiSTer_cmd``.  Non-zero on two consecutive probes means Main
+          is hung (e.g. a core stopped answering the SPI handshake).
+        * ``main_open_fds`` (``int | None``) — open descriptors of the Main
+          process.  Some builds leak one per core load; 1024 is the limit.
+        * ``volume`` (``int | None``) — 0-7, 7 loudest.
+        * ``muted`` (``bool | None``).
+        * ``game_id`` (``str | None``) — CRC32 or disc serial of the loaded game.
+        * ``sam_active`` (``bool | None``) — Super Attract Mode is cycling.
+        * ``sam_game`` (``str | None``) — game SAM is showing, e.g.
+          ``"Breakers (neogeo)"``.
     """
     parts = [p.strip() for p in raw.split(_SEP)]
-    while len(parts) < 5:
+    while len(parts) < 11:
         parts.append("")
     core, uptime_s, load_s, mem_s, fw_s = parts[:5]
+    fifo_s, fds_s, vol_s, gameid_s, sam_s, sam_game_s = parts[5:11]
 
     def _int(value: str) -> int | None:
         try:
@@ -57,6 +80,7 @@ def parse_ssh_probe(raw: str) -> dict:
         if total:
             mem_used_pct = round((total - avail) / total * 100, 1)
     fw_ts = _int(fw_s) if fw_s else None
+    volume, muted = parse_volume(_int(vol_s) if vol_s else None)
 
     return {
         "active_core": core or None,
@@ -64,7 +88,39 @@ def parse_ssh_probe(raw: str) -> dict:
         "cpu_load_1m": load_1m,
         "memory_used_percent": mem_used_pct,
         "firmware_timestamp": fw_ts,
+        "cmd_fifo_pending": _int(fifo_s) if fifo_s else None,
+        "main_open_fds": _int(fds_s) if fds_s else None,
+        "volume": volume,
+        "muted": muted,
+        "game_id": parse_game_id(gameid_s),
+        "sam_active": bool(_int(sam_s)) if sam_s else None,
+        "sam_game": sam_game_s or None,
     }
+
+
+class MisterMainUnresponsiveError(Exception):
+    """Main_MiSTer is not draining /dev/MiSTer_cmd; the command was not queued."""
+
+
+def parse_volume(raw: int | None) -> tuple[int | None, bool | None]:
+    """Decode ``/media/fat/config/Volume.dat`` into ``(level, muted)``.
+
+    Bits 0-2 hold the attenuation (0 = loudest, 7 = quietest) and bit 4 the
+    mute flag. ``level`` is returned the other way round, 0-7 with 7 loudest,
+    which is also what the ``volume <n>`` FIFO command expects.
+    """
+    if raw is None:
+        return None, None
+    return 7 - (raw & 0x07), bool(raw & 0x10)
+
+
+def parse_game_id(raw: str) -> str | None:
+    """Return the CRC32 or serial from ``/tmp/GAMEID`` (needs log_file_entry=1)."""
+    for line in raw.splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key.strip() in ("CRC32", "Serial") and value.strip():
+            return value.strip()
+    return None
 
 
 class MisterSSH:
@@ -125,6 +181,40 @@ class MisterSSH:
         except Exception as err:  # noqa: BLE001 - SSH is best-effort; never break the HTTP integration
             _LOGGER.debug("MiSTer SSH probe failed: %s", err)
             return {}
+
+    async def async_send_command(self, command: str) -> None:
+        """Queue one command on ``/dev/MiSTer_cmd`` without ever blocking.
+
+        Main reads the FIFO only while its loop is alive, so a plain ``echo``
+        hangs forever when Main is stuck.  The write here is non-blocking and
+        fails fast instead.
+
+        Args:
+            command: e.g. ``"volume 5"``, ``"volume mute"``,
+                ``"load_core /media/fat/menu.rbf"``, ``"screenshot"``.
+
+        Raises:
+            ValueError: If *command* is empty or contains a newline.
+            MisterMainUnresponsiveError: If the FIFO is full or missing.
+        """
+        if "\n" in command or not command.strip():
+            raise ValueError(f"invalid MiSTer command: {command!r}")
+        rc, out = await self.async_run(
+            f"python3 -c {shlex.quote(_FIFO_WRITE_PY)} {shlex.quote(command)}",
+            timeout=10,
+        )
+        if rc != 0:
+            raise MisterMainUnresponsiveError(out.strip() or f"rc={rc}")
+
+    async def async_set_volume(self, level: int) -> None:
+        """Set master volume, 0-7 (7 loudest)."""
+        if not 0 <= level <= 7:
+            raise ValueError("volume must be 0-7")
+        await self.async_send_command(f"volume {level}")
+
+    async def async_set_mute(self, muted: bool) -> None:
+        """Mute or unmute master audio."""
+        await self.async_send_command("volume mute" if muted else "volume unmute")
 
     async def async_close(self) -> None:
         """Close the underlying SSH connection if open."""

@@ -1,11 +1,19 @@
 """Async Python client for the MiSTer FPGA mrext Remote API."""
-from .client import MisterClient, MisterConnectionError, MisterStatus
+from .client import (
+    MisterClient,
+    MisterConnectionError,
+    MisterStatus,
+    MisterUnsupportedError,
+)
 from .const import (
+    BACKGROUND_MODES,
+    CMD_FIFO,
     DEFAULT_PORT,
     DEFAULT_SSH_PORT,
     DEFAULT_SSH_USERNAME,
     INI_VIDEO_KEYS,
     KEYBOARD_NAMES,
+    MDNS_SERVICE_TYPE,
     RA_STATUS_CMD,
     RA_SUPPORTED_SYSTEMS,
     RA_USERNAME_PLACEHOLDER,
@@ -16,12 +24,49 @@ from .const import (
     RAAchievement,
     RAGameProgress,
 )
-from .ra import MisterRA, MisterRAError, parse_ra_status
+from .gamepad import (
+    DEFAULT_GAMEPAD_PATH,
+    DEFAULT_GAMEPAD_PORT,
+    GAMEPAD_ACTIONS,
+    GAMEPAD_BUTTONS,
+    MisterGamepad,
+    MisterGamepadError,
+)
+from .ra import MisterRA, MisterRAError, parse_ra_log, parse_ra_status
 from .ra_web import MisterRAWeb, MisterRAWebError
-from .ssh import MisterSSH, parse_ssh_probe
-from .websocket import MisterWebSocketClient, apply_ws_message
+from .ssh import (
+    MisterMainUnresponsiveError,
+    MisterSSH,
+    parse_game_id,
+    parse_ssh_probe,
+    parse_volume,
+)
+from .websocket import (
+    MisterIndexStatus,
+    MisterWebSocketClient,
+    apply_ws_message,
+    parse_index_status,
+    split_menu_navigation,
+)
 
 __all__ = [
+    "BACKGROUND_MODES",
+    "CMD_FIFO",
+    "DEFAULT_GAMEPAD_PATH",
+    "DEFAULT_GAMEPAD_PORT",
+    "GAMEPAD_ACTIONS",
+    "GAMEPAD_BUTTONS",
+    "MDNS_SERVICE_TYPE",
+    "MisterGamepad",
+    "MisterGamepadError",
+    "MisterIndexStatus",
+    "MisterMainUnresponsiveError",
+    "MisterUnsupportedError",
+    "parse_game_id",
+    "parse_index_status",
+    "parse_ra_log",
+    "parse_volume",
+    "split_menu_navigation",
     "MisterClient",
     "MisterStatus",
     "MisterConnectionError",
@@ -49,4 +94,4 @@ __all__ = [
     "DEFAULT_SSH_USERNAME",
     "SSH_PROBE_CMD",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"
