@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -12,6 +12,49 @@ from .client import MisterStatus
 from .const import WS_PATH
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MisterIndexStatus:
+    """Game-index state carried by ``indexStatus:`` frames."""
+
+    exists: bool = False
+    indexing: bool = False
+    total_steps: int = 0
+    current_step: int = 0
+    description: str = ""
+
+
+def parse_index_status(rest: str) -> MisterIndexStatus:
+    """Parse the payload of ``indexStatus:<y|n>,<y|n>,<total>,<current>,<desc>``."""
+    parts = rest.split(",", 4)
+    parts += [""] * (5 - len(parts))
+
+    def _int(value: str) -> int:
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+
+    return MisterIndexStatus(
+        exists=parts[0] == "y",
+        indexing=parts[1] == "y",
+        total_steps=_int(parts[2]),
+        current_step=_int(parts[3]),
+        description=parts[4],
+    )
+
+
+def split_menu_navigation(rest: str) -> tuple[str | None, str | None]:
+    """Split ``menuNavigation:<FULLPATH>:<CURRENTPATH>`` into its two parts.
+
+    *FULLPATH* is the folder open in the menu, *CURRENTPATH* the highlighted
+    entry.  Older senders without the separator yield ``(rest, None)``.
+    """
+    full, sep, current = rest.strip().partition(":")
+    if not sep:
+        return full or None, None
+    return full or None, current or None
 
 
 def apply_ws_message(
@@ -29,11 +72,15 @@ def apply_ws_message(
 
     Understood prefixes (``prefix:rest``):
 
-    * ``coreRunning`` — updates :attr:`~mister_fpga.MisterStatus.core`.
+    * ``coreRunning`` — updates :attr:`~mister_fpga.MisterStatus.core`; a new
+      core clears the (now stale) system and game fields.
     * ``gameRunning`` — updates :attr:`~mister_fpga.MisterStatus.game` and
-      :attr:`~mister_fpga.MisterStatus.game_name`.
-    * ``menuNavigation`` — updates *menu_path*.
-    * ``indexStatus`` — updates *index_state* ``(exists, in_progress)``.
+      :attr:`~mister_fpga.MisterStatus.game_name` (``<system>/<file>``, or the
+      bare core name for arcade).
+    * ``menuNavigation`` — updates *menu_path* to ``FULLPATH/CURRENTPATH``
+      (see :func:`split_menu_navigation` for the parts).
+    * ``indexStatus`` — updates *index_state* ``(exists, in_progress)``; use
+      :func:`parse_index_status` for the progress fields.
 
     Args:
         message: Raw text frame received from the WebSocket.
@@ -55,21 +102,32 @@ def apply_ws_message(
                 menu_path,
                 index_state,
             )
-        return replace(status, core=core), menu_path, index_state
+        if core == status.core:
+            return status, menu_path, index_state
+        return (
+            replace(
+                status, core=core, system=None, system_name=None,
+                game=None, game_name=None,
+            ),
+            menu_path,
+            index_state,
+        )
     if prefix == "gameRunning":
         rest = rest.strip()
         if not rest:
             return replace(status, game=None, game_name=None), menu_path, index_state
-        _, _, name = rest.partition("/")
-        game_name = name.rsplit(".", 1)[0] if name else None
+        _, sep, name = rest.partition("/")
+        if not sep:  # arcade: the bare core/MRA name
+            name = rest
+        game_name = name.rsplit(".", 1)[0] if sep else name
         return replace(status, game=rest, game_name=game_name), menu_path, index_state
     if prefix == "menuNavigation":
-        return status, rest.strip() or None, index_state
+        full, current = split_menu_navigation(rest)
+        path = "/".join(p for p in (full, current) if p) or None
+        return status, path, index_state
     if prefix == "indexStatus":
-        parts = rest.split(",")
-        exists = len(parts) > 0 and parts[0] == "y"
-        in_progress = len(parts) > 1 and parts[1] == "y"
-        return status, menu_path, (exists, in_progress)
+        idx = parse_index_status(rest)
+        return status, menu_path, (idx.exists, idx.indexing)
     return status, menu_path, index_state
 
 
@@ -103,6 +161,7 @@ class MisterWebSocketClient:
         self._owns_session = session is None
         self._reconnect_delay = reconnect_delay
         self._stop = False
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
 
     @property
     def url(self) -> str:
@@ -127,6 +186,7 @@ class MisterWebSocketClient:
             while not self._stop:
                 try:
                     async with session.ws_connect(self.url, heartbeat=30) as ws:
+                        self._ws = ws
                         async for msg in ws:
                             if msg.type == aiohttp.WSMsgType.TEXT:
                                 result = on_message(msg.data)
@@ -139,12 +199,34 @@ class MisterWebSocketClient:
                                 break
                 except (aiohttp.ClientError, TimeoutError):
                     pass
+                finally:
+                    self._ws = None
                 if self._stop:
                     break
                 await asyncio.sleep(self._reconnect_delay)
         finally:
             if owns:
                 await session.close()
+
+    @property
+    def connected(self) -> bool:
+        """True while a WebSocket connection is open."""
+        return self._ws is not None and not self._ws.closed
+
+    async def async_send(self, message: str) -> None:
+        """Send a raw command frame on the open connection.
+
+        Server commands: ``getIndexStatus``, ``kbd:<name>``, ``kbdRaw:<code>``,
+        ``kbdRawDown:<code>`` / ``kbdRawUp:<code>`` (hold a key), and on
+        Remote >= 0.5 ``mouseMove``/``mousePos``/``mouseBtn``.  Unknown
+        commands are answered with an ``invalid`` frame.
+
+        Raises:
+            ConnectionError: If not connected.
+        """
+        if not self.connected:
+            raise ConnectionError("MiSTer WebSocket is not connected")
+        await self._ws.send_str(message)
 
     def stop(self) -> None:
         """Signal the :meth:`listen` loop to exit after the current iteration."""

@@ -80,3 +80,44 @@ async def test_async_run_raises_and_drops_conn_on_error():
     with pytest.raises(OSError):
         await ssh.async_run("x")
     assert ssh._conn is None
+
+
+def test_parse_ssh_probe_health_fields():
+    raw = (
+        "PSX|||\n368.96 234.28\n|||\n1.79 1.68 0.83 2/118 3778\n|||\n504096\n384160"
+        "\n|||\n1785466274\n|||\n65229\n|||\n131\n|||\n  16\n|||\n"
+        "Serial: SLUS-00668\n|||\n1\n|||\nParasite Eve (US) (psx)"
+    )
+    data = parse_ssh_probe(raw)
+    assert data["cmd_fifo_pending"] == 65229
+    assert data["main_open_fds"] == 131
+    assert data["volume"] == 7 and data["muted"] is True
+    assert data["game_id"] == "SLUS-00668"
+    assert data["sam_active"] is True
+    assert data["sam_game"] == "Parasite Eve (US) (psx)"
+
+
+def test_parse_volume():
+    from mister_fpga import parse_volume
+
+    assert parse_volume(0) == (7, False)
+    assert parse_volume(7) == (0, False)
+    assert parse_volume(0x13) == (4, True)
+    assert parse_volume(None) == (None, None)
+
+
+@pytest.mark.asyncio
+async def test_send_command_quotes_and_detects_hang():
+    from mister_fpga import MisterMainUnresponsiveError
+
+    ssh = MisterSSH("h", 22, "root", "1")
+    ssh._conn = _FakeConn(_FakeResult(stdout="", exit_status=0))
+    await ssh.async_send_command("load_core /media/fat/games/x y'z.mgl")
+    expected = """'load_core /media/fat/games/x y'"'"'z.mgl'"""
+    assert ssh._conn.commands[0].endswith(expected)
+
+    ssh._conn = _FakeConn(_FakeResult(stdout="[Errno 11] EAGAIN", exit_status=3))
+    with pytest.raises(MisterMainUnresponsiveError):
+        await ssh.async_set_volume(5)
+    with pytest.raises(ValueError):
+        await ssh.async_send_command("volume 1\nvolume 2")

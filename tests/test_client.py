@@ -182,7 +182,15 @@ async def test_search_games(client):
         import yarl
 
         key = ("POST", yarl.URL(f"{BASE}/games/search"))
-        assert m.requests[key][0].kwargs["json"] == {"data": "chrono", "system": "SNES"}
+        sent = m.requests[key][0].kwargs["json"]
+        assert sent == {"query": "chrono", "system": "SNES"}
+
+    with aioresponses() as m:
+        m.post(f"{BASE}/games/search", payload={"data": [], "total": 0})
+        await client.async_search_games("chrono", page=2)
+        assert m.requests[key][0].kwargs["json"] == {
+            "query": "chrono", "system": "all", "page": 2,
+        }
 
 
 async def test_get_screenshots(client):
@@ -265,10 +273,12 @@ async def test_set_background_mode(client):
     import yarl
 
     with aioresponses() as m:
-        m.put(f"{BASE}/settings/core/menu", status=200)
+        m.put(f"{BASE}/settings/cores/menu", status=200)
+        await client.async_set_background_mode(12)
+        put_calls = m.requests[("PUT", yarl.URL(f"{BASE}/settings/cores/menu"))]
+    assert put_calls[0].kwargs["json"] == {"mode": 12}
+    with pytest.raises(ValueError):
         await client.async_set_background_mode(3)
-        put_calls = m.requests[("PUT", yarl.URL(f"{BASE}/settings/core/menu"))]
-    assert put_calls[0].kwargs["json"] == {"mode": 3}
 
 
 async def test_music_playlists_and_playback(client):
@@ -320,9 +330,9 @@ async def test_peers(client):
 async def test_generic_launch_and_token(client):
     with aioresponses() as m:
         m.post(f"{BASE}/launch", status=200)
-        m.get(f"{BASE}/l/bWVudS5yYmY=", status=200)
+        m.get(f"{BASE}/l/bWVudS5yYmY", status=200)  # base64url, no padding
         await client.async_launch_path("/media/fat/menu.rbf")
-        await client.async_launch_token("bWVudS5yYmY=")
+        await client.async_launch_token("menu.rbf")
 
 
 async def test_create_shortcut(client):
@@ -348,3 +358,72 @@ def test_ssh_defaults_exported():
     assert DEFAULT_SSH_PORT == 22
     assert DEFAULT_SSH_USERNAME == "root"
     assert "CORENAME" in SSH_PROBE_CMD
+
+
+async def test_html_fallback_is_unsupported(client):
+    from mister_fpga import MisterUnsupportedError
+
+    with aioresponses() as m:
+        m.get(
+            f"{BASE}/playlog/status",
+            body="<!doctype html>",
+            content_type="text/html",
+        )
+        with pytest.raises(MisterUnsupportedError):
+            await client.async_get_playlog_status()
+
+
+async def test_status_picks_sd_card_and_session_times(client):
+    with aioresponses() as m:
+        m.get(
+            f"{BASE}/sysinfo",
+            payload={
+                "ips": ["1.2.3.4"],
+                "disks": [
+                    {"path": "/media/usb0", "total": 9, "used": 1, "free": 8},
+                    {"path": "/media/fat", "total": 100, "used": 96, "free": 4},
+                ],
+            },
+        )
+        m.get(
+            f"{BASE}/games/playing",
+            payload={
+                "core": "GBA", "system": "", "systemName": "", "game": "",
+                "gameName": "", "coreSessionTime": 116, "gameSessionTime": 0,
+            },
+        )
+        status = await client.async_get_status()
+    assert status.disk_free == 4
+    assert len(status.disks) == 2
+    assert status.core_session_time == 116
+    assert status.game is None
+
+
+async def test_screenshot_names_are_quoted(client):
+    with aioresponses() as m:
+        m.delete(f"{BASE}/screenshots/SNES/a%23b.png", status=200)
+        await client.async_delete_screenshot("SNES", "a#b.png")
+
+
+async def test_screenshots_null_is_empty(client):
+    with aioresponses() as m:
+        m.get(f"{BASE}/screenshots", body="null", content_type="application/json")
+        assert await client.async_get_screenshots() == []
+
+
+async def test_browse_menu_rejects_traversal(client):
+    with pytest.raises(ValueError):
+        await client.async_browse_menu("../../etc")
+
+
+async def test_playlog_summary_query(client):
+    with aioresponses() as m:
+        m.get(f"{BASE}/playlog/summary?top=3&days=7", payload={"totalTime": 60})
+        data = await client.async_get_playlog_summary(top=3, days=7)
+    assert data["totalTime"] == 60
+
+
+async def test_search_systems(client):
+    with aioresponses() as m:
+        m.get(f"{BASE}/games/search/systems", payload={"systems": [{"id": "SNES"}]})
+        assert await client.async_get_search_systems() == [{"id": "SNES"}]

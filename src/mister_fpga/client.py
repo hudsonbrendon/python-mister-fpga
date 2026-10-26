@@ -1,18 +1,22 @@
 """Async REST client for the MiSTer FPGA mrext Remote API."""
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 
 from .const import (
+    BACKGROUND_MODES,
     PATH_CORE_MENU,
     PATH_GAMES_INDEX,
     PATH_GAMES_LAUNCH,
     PATH_GAMES_SEARCH,
+    PATH_GAMES_VIEW,
     PATH_INIS,
     PATH_KEYBOARD,
     PATH_KEYBOARD_RAW,
@@ -20,6 +24,7 @@ from .const import (
     PATH_LAUNCH_MENU,
     PATH_LAUNCH_NEW,
     PATH_LAUNCH_TOKEN,
+    PATH_MENU_VIEW,
     PATH_MUSIC_NEXT,
     PATH_MUSIC_PLAY,
     PATH_MUSIC_PLAYBACK,
@@ -28,13 +33,20 @@ from .const import (
     PATH_MUSIC_STOP,
     PATH_PEERS,
     PATH_PLAYING,
+    PATH_PLAYLOG_GAMES,
+    PATH_PLAYLOG_SESSIONS,
+    PATH_PLAYLOG_STATUS,
+    PATH_PLAYLOG_SUMMARY,
     PATH_REBOOT,
+    PATH_REMOTE_LOG,
     PATH_RESTART_REMOTE,
+    PATH_SCREEN,
     PATH_SCREENSHOTS,
     PATH_SCRIPTS_CONSOLE,
     PATH_SCRIPTS_KILL,
     PATH_SCRIPTS_LAUNCH,
     PATH_SCRIPTS_LIST,
+    PATH_SEARCH_SYSTEMS,
     PATH_SYSINFO,
     PATH_SYSTEMS,
     PATH_WALLPAPERS,
@@ -51,6 +63,30 @@ class MisterConnectionError(Exception):
     """
 
 
+class MisterUnsupportedError(MisterConnectionError):
+    """The endpoint does not exist on this Remote version.
+
+    mrext Remote answers unknown ``/api`` routes (or a wrong HTTP method) with
+    its web UI, ``200 text/html``, instead of a 404.
+    """
+
+
+def _seg(value: str) -> str:
+    """Quote one URL path segment (names may contain ``#``, ``?``, spaces)."""
+    return quote(str(value), safe="")
+
+
+def _safe_relative(path: str) -> str:
+    """Reject paths that climb out of the SD card.
+
+    Remote 0.4 joins relative paths onto ``/media/fat`` without containment,
+    so ``../..`` reaches the whole filesystem.
+    """
+    if ".." in path.replace("\\", "/").split("/"):
+        raise ValueError(f"path may not contain '..': {path!r}")
+    return path
+
+
 @dataclass
 class MisterStatus:
     """Snapshot of the MiSTer device state at a point in time.
@@ -64,17 +100,26 @@ class MisterStatus:
             menu is active.
         system: System slug used by mrext (e.g. ``"snes"``).
         system_name: Human-readable system name (e.g. ``"Super Nintendo"``).
-        game: Full path of the running game ROM, or ``None``.
+        game: Running game as ``"<systemId>/<filename>"`` (or the bare core
+            name for arcade), or ``None``.  This is *not* a filesystem path;
+            do not pass it to :meth:`MisterClient.async_launch_game`.
         game_name: Basename of the game without extension, or ``None``.
         hostname: MiSTer hostname as reported by the Remote API.
         version: mrext Remote version string.
         ip: Primary IP address of the MiSTer device.
         ips: All IP addresses reported by the device.
         updated: ISO-8601 timestamp of the last sysinfo update.
-        dns: DNS server address reported by the device.
-        disk_total: Total SD-card space in bytes (first disk).
-        disk_used: Used SD-card space in bytes (first disk).
-        disk_free: Free SD-card space in bytes (first disk).
+        updated: Time of the last MiSTer update, not of this snapshot.
+        dns: ``<hostname>.local`` mDNS name (only when mDNS is enabled) — not a
+            DNS server.
+        disk_total: Total SD-card space in bytes.
+        disk_used: Used SD-card space in bytes.
+        disk_free: Free SD-card space in bytes.
+        disks: Every disk reported by sysinfo (SD card, USB drives, ...).
+        core_session_time: Seconds the current core has been running
+            (Remote >= 0.5, else ``None``).
+        game_session_time: Seconds the current game has been running
+            (Remote >= 0.5, else ``None``).
     """
 
     online: bool = False
@@ -92,6 +137,9 @@ class MisterStatus:
     disk_total: int | None = None
     disk_used: int | None = None
     disk_free: int | None = None
+    disks: list[dict] = field(default_factory=list)
+    core_session_time: int | None = None
+    game_session_time: int | None = None
 
     @property
     def is_running_game(self) -> bool:
@@ -164,6 +212,10 @@ class MisterClient:
                 resp.raise_for_status()
                 if not parse_json:
                     return await resp.read()
+                if resp.content_type == "text/html":
+                    raise MisterUnsupportedError(
+                        f"{method} {url} is not an API endpoint on this Remote"
+                    )
                 text = await resp.text()
                 if not text.strip():
                     return None
@@ -190,7 +242,10 @@ class MisterClient:
         playing = await self._request("GET", PATH_PLAYING) or {}
         ips = sysinfo.get("ips") or []
         disks = sysinfo.get("disks") or []
-        disk = disks[0] if disks else {}
+        disk = next(
+            (d for d in disks if d.get("path") == "/media/fat"),
+            disks[0] if disks else {},
+        )
         return MisterStatus(
             online=True,
             core=playing.get("core") or None,
@@ -207,6 +262,9 @@ class MisterClient:
             disk_total=disk.get("total"),
             disk_used=disk.get("used"),
             disk_free=disk.get("free"),
+            disks=disks,
+            core_session_time=playing.get("coreSessionTime"),
+            game_session_time=playing.get("gameSessionTime"),
         )
 
     async def async_get_systems(self) -> list[dict]:
@@ -225,19 +283,45 @@ class MisterClient:
         """Return to the MiSTer main menu."""
         await self._request("POST", PATH_LAUNCH_MENU)
 
-    async def async_search_games(self, query: str, system: str = "all") -> dict:
+    async def async_search_games(
+        self, query: str, system: str = "all", page: int | None = None
+    ) -> dict:
         """Search the game index.
 
         Args:
             query: Free-text search string.
-            system: Limit results to a system slug, or ``"all"`` (default).
+            system: Limit results to a system id, or ``"all"`` (default).
+            page: 1-based result page (Remote >= 0.5 paginates; 0.4 ignores it
+                and caps results at 500).
 
         Returns:
-            A dict with a ``results`` key containing matching game entries.
+            ``{"data": [{"system": {...}, "name", "path"}], "total",
+            "pageSize", "page"}``.
+        """
+        payload: dict[str, Any] = {"query": query, "system": system}
+        if page is not None:
+            payload["page"] = page
+        return await self._request("POST", PATH_GAMES_SEARCH, payload=payload) or {}
+
+    async def async_get_search_systems(self) -> list[dict]:
+        """Return the systems present in the game index (``[{id, name}]``)."""
+        data = await self._request("GET", PATH_SEARCH_SYSTEMS) or {}
+        return data.get("systems", []) if isinstance(data, dict) else []
+
+    async def async_browse_games(self, path: str | None = None) -> dict:
+        """List a games folder (``{"up", "items"}``); root when *path* is None."""
+        payload = {"path": _safe_relative(path)} if path else {}
+        return await self._request("POST", PATH_GAMES_VIEW, payload=payload) or {}
+
+    async def async_browse_menu(self, path: str = "") -> dict:
+        """List a folder of the MiSTer menu tree (``{"up", "items": [...]}``).
+
+        Raises:
+            ValueError: If *path* contains ``..`` (Remote 0.4 does not contain it).
         """
         return (
             await self._request(
-                "POST", PATH_GAMES_SEARCH, payload={"data": query, "system": system}
+                "POST", PATH_MENU_VIEW, payload={"path": _safe_relative(path)}
             )
             or {}
         )
@@ -264,7 +348,8 @@ class MisterClient:
 
     async def async_get_screenshots(self) -> list[dict]:
         """Return metadata for all saved screenshots."""
-        return await self._request("GET", PATH_SCREENSHOTS) or []
+        data = await self._request("GET", PATH_SCREENSHOTS)
+        return data if isinstance(data, list) else []
 
     async def async_get_screenshot_image(self, core: str, filename: str) -> bytes:
         """Download a screenshot image as raw bytes.
@@ -280,7 +365,13 @@ class MisterClient:
             MisterConnectionError: If the image cannot be retrieved.
         """
         return await self._request(
-            "GET", f"{PATH_SCREENSHOTS}/{core}/{filename}", parse_json=False
+            "GET", f"{PATH_SCREENSHOTS}/{_seg(core)}/{_seg(filename)}", parse_json=False
+        )
+
+    async def async_delete_screenshot(self, core: str, filename: str) -> None:
+        """Delete one saved screenshot."""
+        await self._request(
+            "DELETE", f"{PATH_SCREENSHOTS}/{_seg(core)}/{_seg(filename)}"
         )
 
     async def async_get_music_status(self) -> dict:
@@ -306,7 +397,7 @@ class MisterClient:
 
     async def async_set_wallpaper(self, filename: str) -> None:
         """Set the active wallpaper by filename."""
-        await self._request("POST", f"{PATH_WALLPAPERS}/{filename}")
+        await self._request("POST", f"{PATH_WALLPAPERS}/{_seg(filename)}")
 
     async def async_clear_wallpaper(self) -> None:
         """Remove the active wallpaper (revert to default)."""
@@ -330,7 +421,18 @@ class MisterClient:
         await self._request("PUT", f"{PATH_INIS}/{ini_id}", payload=values)
 
     async def async_set_background_mode(self, mode: int) -> None:
-        """Set the core/menu background display mode (0 = off, 1 = wallpaper, …)."""
+        """Set the menu background mode.
+
+        Args:
+            mode: One of :data:`~mister_fpga.const.BACKGROUND_MODES` (0 none,
+                2 wallpaper, 4/6 horizontal bars, 8/10 vertical bars,
+                12 spectrum, 14 black).
+
+        Raises:
+            ValueError: For any other value (the server rejects odd modes).
+        """
+        if mode not in BACKGROUND_MODES:
+            raise ValueError(f"invalid background mode {mode}")
         await self._request("PUT", PATH_CORE_MENU, payload={"mode": mode})
 
     # --- Music (extended) ---
@@ -340,11 +442,11 @@ class MisterClient:
 
     async def async_set_music_playlist(self, name: str) -> None:
         """Activate the music playlist identified by *name*."""
-        await self._request("POST", f"{PATH_MUSIC_PLAYLIST}/{name}")
+        await self._request("POST", f"{PATH_MUSIC_PLAYLIST}/{_seg(name)}")
 
     async def async_set_music_playback(self, mode: str) -> None:
         """Set playback mode (e.g. ``"random"``, ``"loop"``)."""
-        await self._request("POST", f"{PATH_MUSIC_PLAYBACK}/{mode}")
+        await self._request("POST", f"{PATH_MUSIC_PLAYBACK}/{_seg(mode)}")
 
     # --- Scripts ---
     async def async_get_scripts(self) -> dict:
@@ -353,7 +455,7 @@ class MisterClient:
 
     async def async_launch_script(self, filename: str) -> None:
         """Launch a user script by its filename."""
-        await self._request("POST", f"{PATH_SCRIPTS_LAUNCH}/{filename}")
+        await self._request("POST", f"{PATH_SCRIPTS_LAUNCH}/{_seg(filename)}")
 
     async def async_open_console(self) -> None:
         """Open the MiSTer console (script terminal)."""
@@ -375,8 +477,13 @@ class MisterClient:
         await self._request("POST", PATH_LAUNCH, payload={"path": path})
 
     async def async_launch_token(self, data: str) -> None:
-        """Launch using a short-link token (mrext ``/l/<data>`` endpoint)."""
-        await self._request("GET", f"{PATH_LAUNCH_TOKEN}/{data}")
+        """Launch a token: a path, or a ``**command:`` such as ``**random:snes``.
+
+        The text is base64url-encoded (no padding) as the ``/l/<data>``
+        endpoint requires; pass it in plain form.
+        """
+        encoded = base64.urlsafe_b64encode(data.encode()).decode().rstrip("=")
+        await self._request("GET", f"{PATH_LAUNCH_TOKEN}/{encoded}")
 
     async def async_create_shortcut(
         self, game_path: str, folder: str, name: str
@@ -399,5 +506,52 @@ class MisterClient:
 
     # --- Raw keyboard ---
     async def async_send_keyboard_raw(self, code: int) -> None:
-        """Send a raw HID keyboard scan-code integer."""
+        """Tap a Linux evdev ``KEY_*`` code (e.g. 28 = Enter).
+
+        A negative code sends Shift + ``abs(code)``.
+        """
         await self._request("POST", f"{PATH_KEYBOARD_RAW}/{code}")
+
+    # --- Remote >= 0.5 ---
+    async def async_get_screen(self) -> dict:
+        """Return the current framebuffer resolution ``{width, height}``."""
+        return await self._request("GET", PATH_SCREEN) or {}
+
+    async def async_get_playlog_status(self) -> dict:
+        """PlayLog state: ``{installed, running, database, recents, startup}``."""
+        return await self._request("GET", PATH_PLAYLOG_STATUS) or {}
+
+    async def async_get_playlog_summary(
+        self, *, top: int | None = None, days: int | None = None
+    ) -> dict:
+        """Play-time summary: totals (seconds), streaks, top games/systems, per-day."""
+        params = "&".join(
+            f"{k}={v}" for k, v in (("top", top), ("days", days)) if v is not None
+        )
+        path = PATH_PLAYLOG_SUMMARY + (f"?{params}" if params else "")
+        return await self._request("GET", path) or {}
+
+    async def async_get_playlog_games(
+        self, *, sort: str | None = None, limit: int | None = None, offset: int = 0
+    ) -> dict:
+        """Per-game play stats ``{"games": [...], "total"}``."""
+        params = [f"offset={offset}"]
+        if sort:
+            params.append(f"sort={_seg(sort)}")
+        if limit:
+            params.append(f"limit={limit}")
+        return (
+            await self._request("GET", f"{PATH_PLAYLOG_GAMES}?{'&'.join(params)}")
+            or {}
+        )
+
+    async def async_get_playlog_sessions(
+        self, *, limit: int | None = None, offset: int = 0
+    ) -> dict:
+        """Recent play sessions ``{"sessions": [...], "total"}``."""
+        params = f"offset={offset}" + (f"&limit={limit}" if limit else "")
+        return await self._request("GET", f"{PATH_PLAYLOG_SESSIONS}?{params}") or {}
+
+    async def async_get_remote_log(self) -> bytes:
+        """Download the Remote service log."""
+        return await self._request("GET", PATH_REMOTE_LOG, parse_json=False)

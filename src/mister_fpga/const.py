@@ -26,7 +26,7 @@ PATH_MUSIC_PLAYLIST = "/music/playlist"
 PATH_MUSIC_PLAYBACK = "/music/playback"
 PATH_WALLPAPERS = "/wallpapers"
 PATH_INIS = "/settings/inis"
-PATH_CORE_MENU = "/settings/core/menu"
+PATH_CORE_MENU = "/settings/cores/menu"
 PATH_SCRIPTS_LIST = "/scripts/list"
 PATH_SCRIPTS_LAUNCH = "/scripts/launch"
 PATH_SCRIPTS_CONSOLE = "/scripts/console"
@@ -36,6 +36,31 @@ PATH_LAUNCH = "/launch"
 PATH_LAUNCH_TOKEN = "/l"
 PATH_LAUNCH_NEW = "/launch/new"
 PATH_KEYBOARD_RAW = "/controls/keyboard-raw"
+PATH_SEARCH_SYSTEMS = "/games/search/systems"
+PATH_GAMES_VIEW = "/games/view"
+PATH_MENU_VIEW = "/menu/view"
+PATH_SCREEN = "/controls/screen"  # Remote >= 0.5
+PATH_REMOTE_LOG = "/settings/remote/log"
+PATH_PLAYLOG_STATUS = "/playlog/status"  # Remote >= 0.5
+PATH_PLAYLOG_SUMMARY = "/playlog/summary"
+PATH_PLAYLOG_GAMES = "/playlog/games"
+PATH_PLAYLOG_SESSIONS = "/playlog/sessions"
+
+# mDNS service type advertised by mrext Remote (for zeroconf discovery).
+MDNS_SERVICE_TYPE = "_mister-remote._tcp.local."
+
+# Menu/core background modes accepted by PUT /settings/cores/menu.
+# Odd values are rejected by the server ("invalid background mode").
+BACKGROUND_MODES = {
+    0: "none",
+    2: "wallpaper",
+    4: "hbars1",
+    6: "hbars2",
+    8: "vbars1",
+    10: "vbars2",
+    12: "spectrum",
+    14: "black",
+}
 
 # WebSocket endpoint (mounted under /api on Remote v0.4)
 WS_PATH = "/api/ws"
@@ -47,12 +72,32 @@ INI_VIDEO_KEYS = ("video_brightness", "video_contrast", "video_saturation")
 DEFAULT_SSH_PORT = 22
 DEFAULT_SSH_USERNAME = "root"
 
+# Main_MiSTer command FIFO. Main reads it from the same cooperative loop that
+# talks to the FPGA, so a stalled core leaves bytes queued here forever.
+CMD_FIFO = "/dev/MiSTer_cmd"
+
+# Bytes waiting unread in the command FIFO (FIONREAD does not consume them).
+FIFO_PENDING_CMD = (
+    "[ -p " + CMD_FIFO + " ] && python3 -c \"import os,fcntl,termios,struct;"
+    "f=os.open('" + CMD_FIFO + "',os.O_RDONLY|os.O_NONBLOCK);"
+    "print(struct.unpack('i',fcntl.ioctl(f,termios.FIONREAD,bytes(4)))[0])\""
+)
+
+# Fields 1-5 are the original probe; 6-11 were added in 0.3.0 (Main health,
+# volume, game id, Super Attract Mode). The parser tolerates older/shorter output.
 SSH_PROBE_CMD = (
     "cat /tmp/CORENAME 2>/dev/null; echo '|||'; "
     "cat /proc/uptime 2>/dev/null; echo '|||'; "
     "cat /proc/loadavg 2>/dev/null; echo '|||'; "
     "awk '/MemTotal|MemAvailable/{print $2}' /proc/meminfo 2>/dev/null; echo '|||'; "
-    "stat -c %Y /media/fat/MiSTer 2>/dev/null"
+    "stat -c %Y /media/fat/MiSTer 2>/dev/null; echo '|||'; "
+    + FIFO_PENDING_CMD + " 2>/dev/null; echo '|||'; "
+    "P=$(pidof MiSTer 2>/dev/null | cut -d' ' -f1); "
+    "[ -n \"$P\" ] && ls /proc/$P/fd 2>/dev/null | wc -l; echo '|||'; "
+    "od -An -tu1 -N1 /media/fat/config/Volume.dat 2>/dev/null; echo '|||'; "
+    "cat /tmp/GAMEID 2>/dev/null; echo '|||'; "
+    "ps 2>/dev/null | grep -c '[M]iSTer_SAM_on.sh loop_core'; echo '|||'; "
+    "cat /tmp/SAM_Game.txt 2>/dev/null"
 )
 
 # Keyboard control names accepted by POST /controls/keyboard/{name}
