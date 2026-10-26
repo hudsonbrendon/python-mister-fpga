@@ -254,7 +254,7 @@ async def test_validate_success_and_failure():
 
 
 def test_top_level_exports():
-    assert mister_fpga.__version__ == "0.3.0"
+    assert mister_fpga.__version__ == "0.3.1"
     assert hasattr(mister_fpga, "MisterRAWeb")
     assert hasattr(mister_fpga, "MisterRAWebError")
     assert hasattr(mister_fpga, "MisterRAWebStats")

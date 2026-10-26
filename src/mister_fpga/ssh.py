@@ -5,6 +5,8 @@ import asyncio
 import logging
 import shlex
 
+import asyncssh
+
 from .const import CMD_FIFO, SSH_PROBE_CMD
 
 _LOGGER = logging.getLogger(__name__)
@@ -148,8 +150,6 @@ class MisterSSH:
     async def _ensure(self) -> None:
         if self._conn is not None:
             return
-        import asyncssh
-
         self._conn = await asyncssh.connect(
             self.host,
             port=self.port,

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.1
+- Import `asyncssh` at module load. The lazy import inside `MisterSSH._ensure` ran on the event loop and made Home Assistant report blocking calls (liboqs/fido2 file reads) on the first SSH connection.
+
 ## 0.3.0
 
 Findings from reverse-engineering mrext Remote 0.4/0.5 and odelot's Main_MiSTer on a real device.
