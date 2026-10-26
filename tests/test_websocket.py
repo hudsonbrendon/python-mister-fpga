@@ -111,3 +111,12 @@ def test_parse_index_status_progress():
     assert (idx.total_steps, idx.current_step) == (10, 3)
     assert idx.description == "Indexing SNES, part 2"
     assert parse_index_status("y,n,0,0,").indexing is False
+
+
+def test_core_after_game_on_launch_keeps_game():
+    # mrext order on launch: coreRunning: -> gameRunning:SNES/x -> coreRunning:SNES
+    status = MisterStatus(online=True, core="sf2")
+    for frame in ("coreRunning:", "gameRunning:SNES/x.sfc", "coreRunning:SNES"):
+        status, _, _ = apply_ws_message(frame, status, None, (False, False))
+    assert status.core == "SNES"
+    assert status.game_name == "x"
