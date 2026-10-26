@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.2
+- WebSocket reducer: a launch from the menu emits `gameRunning` before `coreRunning`; the core update no longer wipes that game. Only a switch from another core clears the stale game/system.
+
 ## 0.3.1
 - Import `asyncssh` at module load. The lazy import inside `MisterSSH._ensure` ran on the event loop and made Home Assistant report blocking calls (liboqs/fido2 file reads) on the first SSH connection.
 

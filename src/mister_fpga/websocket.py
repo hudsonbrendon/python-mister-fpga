@@ -72,8 +72,9 @@ def apply_ws_message(
 
     Understood prefixes (``prefix:rest``):
 
-    * ``coreRunning`` — updates :attr:`~mister_fpga.MisterStatus.core`; a new
-      core clears the (now stale) system and game fields.
+    * ``coreRunning`` — updates :attr:`~mister_fpga.MisterStatus.core`;
+      switching from another core clears the stale system and game fields
+      (a launch from the menu sends ``gameRunning`` first, so that is kept).
     * ``gameRunning`` — updates :attr:`~mister_fpga.MisterStatus.game` and
       :attr:`~mister_fpga.MisterStatus.game_name` (``<system>/<file>``, or the
       bare core name for arcade).
@@ -104,6 +105,9 @@ def apply_ws_message(
             )
         if core == status.core:
             return status, menu_path, index_state
+        if status.core is None:
+            # On launch mrext sends gameRunning before coreRunning; keep the game.
+            return replace(status, core=core), menu_path, index_state
         return (
             replace(
                 status, core=core, system=None, system_name=None,
