@@ -1,10 +1,11 @@
 """Tests for the MiSTer FPGA API client."""
+
 from __future__ import annotations
 
 import aiohttp
-import pytest
 from aiohttp import ClientSession
 from aioresponses import aioresponses
+import pytest
 
 from mister_fpga.client import (
     MisterClient,
@@ -189,7 +190,9 @@ async def test_search_games(client):
         m.post(f"{BASE}/games/search", payload={"data": [], "total": 0})
         await client.async_search_games("chrono", page=2)
         assert m.requests[key][0].kwargs["json"] == {
-            "query": "chrono", "system": "all", "page": 2,
+            "query": "chrono",
+            "system": "all",
+            "page": 2,
         }
 
 
@@ -257,12 +260,8 @@ async def test_inis_get_set_active(client):
         values = await client.async_get_ini_values(1)
         await client.async_set_active_ini(1)
         await client.async_set_ini_values(1, {"video_brightness": "60"})
-        put_inis_calls = m.requests[
-            ("PUT", yarl.URL(f"{BASE}/settings/inis"))
-        ]
-        put_inis_1_calls = m.requests[
-            ("PUT", yarl.URL(f"{BASE}/settings/inis/1"))
-        ]
+        put_inis_calls = m.requests[("PUT", yarl.URL(f"{BASE}/settings/inis"))]
+        put_inis_1_calls = m.requests[("PUT", yarl.URL(f"{BASE}/settings/inis/1"))]
     assert inis["inis"][0]["displayName"] == "Main"
     assert values["video_brightness"] == "50"
     assert put_inis_calls[0].kwargs["json"] == {"ini": 1}
@@ -355,6 +354,7 @@ async def test_send_keyboard_raw(client):
 
 def test_ssh_defaults_exported():
     from mister_fpga import DEFAULT_SSH_PORT, DEFAULT_SSH_USERNAME, SSH_PROBE_CMD
+
     assert DEFAULT_SSH_PORT == 22
     assert DEFAULT_SSH_USERNAME == "root"
     assert "CORENAME" in SSH_PROBE_CMD
@@ -388,8 +388,13 @@ async def test_status_picks_sd_card_and_session_times(client):
         m.get(
             f"{BASE}/games/playing",
             payload={
-                "core": "GBA", "system": "", "systemName": "", "game": "",
-                "gameName": "", "coreSessionTime": 116, "gameSessionTime": 0,
+                "core": "GBA",
+                "system": "",
+                "systemName": "",
+                "game": "",
+                "gameName": "",
+                "coreSessionTime": 116,
+                "gameSessionTime": 0,
             },
         )
         status = await client.async_get_status()

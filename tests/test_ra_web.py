@@ -1,9 +1,10 @@
 """Tests for the RetroAchievements Web API module."""
+
 import re
 
 import aiohttp
-import pytest
 from aioresponses import aioresponses
+import pytest
 
 import mister_fpga
 from mister_fpga.const import (
@@ -148,7 +149,9 @@ def test_parse_recent_achievements_empty():
 
 
 def _rank_url():
-    return re.compile(r"https://retroachievements\.org/API/API_GetUserRankAndScore\.php.*")
+    return re.compile(
+        r"https://retroachievements\.org/API/API_GetUserRankAndScore\.php.*"
+    )
 
 
 def _recent_games_url():

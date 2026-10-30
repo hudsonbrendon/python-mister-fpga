@@ -1,9 +1,11 @@
 """Optional SSH telemetry client for the MiSTer FPGA."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import shlex
+from typing import Any
 
 import asyncssh
 
@@ -24,7 +26,7 @@ _FIFO_WRITE_PY = (
 )
 
 
-def parse_ssh_probe(raw: str) -> dict:
+def parse_ssh_probe(raw: str) -> dict[str, Any]:
     """Parse the batched SSH probe output into a telemetry dict.
 
     The probe command (``SSH_PROBE_CMD``) concatenates eleven fields separated
@@ -41,7 +43,7 @@ def parse_ssh_probe(raw: str) -> dict:
         * ``active_core`` (``str | None``) — name from ``/tmp/CORENAME``.
         * ``uptime_seconds`` (``int | None``) — seconds since last boot.
         * ``cpu_load_1m`` (``float | None``) — 1-minute load average.
-        * ``memory_used_percent`` (``float | None``) — RAM usage 0–100.
+        * ``memory_used_percent`` (``float | None``) — RAM usage 0-100.
         * ``firmware_timestamp`` (``int | None``) — mtime of the MiSTer binary.
         * ``cmd_fifo_pending`` (``int | None``) — unread command-FIFO bytes.
         * ``main_open_fds`` (``int | None``) — open descriptors of Main.
@@ -80,7 +82,7 @@ def parse_ssh_probe(raw: str) -> dict:
         total = _int(mem_lines[0])
         avail = _int(mem_lines[1])
         if total:
-            mem_used_pct = round((total - avail) / total * 100, 1)
+            mem_used_pct = round((total - avail) / total * 100, 1)  # type: ignore[operator]
     fw_ts = _int(fw_s) if fw_s else None
     volume, muted = parse_volume(_int(vol_s) if vol_s else None)
 
@@ -144,12 +146,12 @@ class MisterSSH:
         self.port = port
         self.username = username
         self.password = password
-        self._conn = None
+        self._conn: asyncssh.SSHClientConnection | None = None
         self._lock = asyncio.Lock()
 
-    async def _ensure(self) -> None:
+    async def _ensure(self) -> asyncssh.SSHClientConnection:
         if self._conn is not None:
-            return
+            return self._conn
         self._conn = await asyncssh.connect(
             self.host,
             port=self.port,
@@ -157,8 +159,9 @@ class MisterSSH:
             password=self.password,
             known_hosts=None,
         )
+        return self._conn
 
-    async def async_run(self, command: str, timeout: int = 15) -> tuple[int, str]:
+    async def async_run(self, command: str, timeout: int = 15) -> tuple[int, str]:  # noqa: ASYNC109
         """Run a command over the shared SSH connection.
 
         Returns ``(exit_status, stdout)``. Raises on connection/transport
@@ -166,14 +169,14 @@ class MisterSSH:
         """
         async with self._lock:
             try:
-                await self._ensure()
-                result = await self._conn.run(command, check=False, timeout=timeout)
+                conn = await self._ensure()
+                result = await conn.run(command, check=False, timeout=timeout)
             except Exception:
                 self._conn = None
                 raise
-            return result.exit_status or 0, result.stdout or ""
+            return result.exit_status or 0, result.stdout or ""  # type: ignore[return-value]
 
-    async def async_probe(self) -> dict:
+    async def async_probe(self) -> dict[str, Any]:
         """Run the SSH probe command and return parsed telemetry."""
         try:
             _rc, out = await self.async_run(SSH_PROBE_CMD, timeout=10)

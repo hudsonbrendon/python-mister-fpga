@@ -1,4 +1,5 @@
 """RetroAchievements.org Web API client and parsers (cloud player stats)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -25,12 +26,12 @@ def _abs_image(path: str | None) -> str | None:
     """Resolve a relative RA image path to an absolute media URL."""
     if not path:
         return None
-    if path.startswith("http://") or path.startswith("https://"):
+    if path.startswith(("http://", "https://")):
         return path
     return f"{RA_WEB_IMAGE_BASE}{path}"
 
 
-def parse_rank_and_score(raw: dict) -> tuple[int, int, int | None, int | None]:
+def parse_rank_and_score(raw: Any) -> tuple[int, int, int | None, int | None]:
     """Return (hardcore_points, softcore_points, rank, total_ranked)."""
     if not isinstance(raw, dict):
         return 0, 0, None, None
@@ -46,7 +47,7 @@ def parse_rank_and_score(raw: dict) -> tuple[int, int, int | None, int | None]:
     )
 
 
-def parse_recently_played(raw: list) -> list[RAGameProgress]:
+def parse_recently_played(raw: Any) -> list[RAGameProgress]:
     """Build RAGameProgress entries (most-recent first, as the API returns)."""
     games: list[RAGameProgress] = []
     if not isinstance(raw, list):
@@ -72,7 +73,7 @@ def parse_recently_played(raw: list) -> list[RAGameProgress]:
     return games
 
 
-def parse_recent_achievements(raw: list) -> list[RAAchievement]:
+def parse_recent_achievements(raw: Any) -> list[RAAchievement]:
     """Build RAAchievement entries (most-recent first, as the API returns)."""
     achievements: list[RAAchievement] = []
     if not isinstance(raw, list):
@@ -161,20 +162,23 @@ class MisterRAWeb:
             _LOGGER.debug("RA Web request %s failed: %s", endpoint, err)
             raise MisterRAWebError(f"{endpoint} failed: {err}") from err
 
-    async def async_get_rank_and_score(self) -> dict:
-        return await self._request("API_GetUserRankAndScore.php", {})
+    async def async_get_rank_and_score(self) -> dict[str, Any]:
+        """Fetch the user rank/score payload."""
+        return await self._request("API_GetUserRankAndScore.php", {})  # type: ignore[no-any-return]
 
     async def async_get_recently_played(
         self, count: int = RA_WEB_DEFAULT_RECENT_COUNT
-    ) -> list:
-        return await self._request(
+    ) -> list[Any]:
+        """Fetch the most recently played games."""
+        return await self._request(  # type: ignore[no-any-return]
             "API_GetUserRecentlyPlayedGames.php", {"c": count}
         )
 
     async def async_get_recent_achievements(
         self, minutes: int = RA_WEB_DEFAULT_ACHIEVEMENT_MINUTES
-    ) -> list:
-        return await self._request(
+    ) -> list[Any]:
+        """Fetch achievements unlocked in the last *minutes*."""
+        return await self._request(  # type: ignore[no-any-return]
             "API_GetUserRecentAchievements.php", {"m": minutes}
         )
 

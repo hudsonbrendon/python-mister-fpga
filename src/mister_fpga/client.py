@@ -1,10 +1,11 @@
 """Async REST client for the MiSTer FPGA mrext Remote API."""
+
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass, field
 import json
 import logging
-from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
@@ -137,7 +138,7 @@ class MisterStatus:
     disk_total: int | None = None
     disk_used: int | None = None
     disk_free: int | None = None
-    disks: list[dict] = field(default_factory=list)
+    disks: list[dict[str, Any]] = field(default_factory=list)
     core_session_time: int | None = None
     game_session_time: int | None = None
 
@@ -197,7 +198,7 @@ class MisterClient:
         method: str,
         path: str,
         *,
-        payload: dict | None = None,
+        payload: dict[str, Any] | None = None,
         parse_json: bool = True,
     ) -> Any:
         session = await self._get_session()
@@ -267,7 +268,7 @@ class MisterClient:
             game_session_time=playing.get("gameSessionTime"),
         )
 
-    async def async_get_systems(self) -> list[dict]:
+    async def async_get_systems(self) -> list[dict[str, Any]]:
         """Return the list of systems known to mrext."""
         return await self._request("GET", PATH_SYSTEMS) or []
 
@@ -285,7 +286,7 @@ class MisterClient:
 
     async def async_search_games(
         self, query: str, system: str = "all", page: int | None = None
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Search the game index.
 
         Args:
@@ -303,17 +304,17 @@ class MisterClient:
             payload["page"] = page
         return await self._request("POST", PATH_GAMES_SEARCH, payload=payload) or {}
 
-    async def async_get_search_systems(self) -> list[dict]:
+    async def async_get_search_systems(self) -> list[dict[str, Any]]:
         """Return the systems present in the game index (``[{id, name}]``)."""
         data = await self._request("GET", PATH_SEARCH_SYSTEMS) or {}
         return data.get("systems", []) if isinstance(data, dict) else []
 
-    async def async_browse_games(self, path: str | None = None) -> dict:
+    async def async_browse_games(self, path: str | None = None) -> dict[str, Any]:
         """List a games folder (``{"up", "items"}``); root when *path* is None."""
         payload = {"path": _safe_relative(path)} if path else {}
         return await self._request("POST", PATH_GAMES_VIEW, payload=payload) or {}
 
-    async def async_browse_menu(self, path: str = "") -> dict:
+    async def async_browse_menu(self, path: str = "") -> dict[str, Any]:
         """List a folder of the MiSTer menu tree (``{"up", "items": [...]}``).
 
         Raises:
@@ -346,7 +347,7 @@ class MisterClient:
         """Capture a screenshot on the MiSTer and save it server-side."""
         await self._request("POST", PATH_SCREENSHOTS)
 
-    async def async_get_screenshots(self) -> list[dict]:
+    async def async_get_screenshots(self) -> list[dict[str, Any]]:
         """Return metadata for all saved screenshots."""
         data = await self._request("GET", PATH_SCREENSHOTS)
         return data if isinstance(data, list) else []
@@ -364,7 +365,7 @@ class MisterClient:
         Raises:
             MisterConnectionError: If the image cannot be retrieved.
         """
-        return await self._request(
+        return await self._request(  # type: ignore[no-any-return]
             "GET", f"{PATH_SCREENSHOTS}/{_seg(core)}/{_seg(filename)}", parse_json=False
         )
 
@@ -374,7 +375,7 @@ class MisterClient:
             "DELETE", f"{PATH_SCREENSHOTS}/{_seg(core)}/{_seg(filename)}"
         )
 
-    async def async_get_music_status(self) -> dict:
+    async def async_get_music_status(self) -> dict[str, Any]:
         """Return the current music-player status dict."""
         return await self._request("GET", PATH_MUSIC_STATUS) or {}
 
@@ -391,7 +392,7 @@ class MisterClient:
         await self._request("POST", PATH_MUSIC_NEXT)
 
     # --- Wallpapers ---
-    async def async_get_wallpapers(self) -> dict:
+    async def async_get_wallpapers(self) -> dict[str, Any]:
         """Return available wallpapers and the currently active one."""
         return await self._request("GET", PATH_WALLPAPERS) or {}
 
@@ -404,11 +405,11 @@ class MisterClient:
         await self._request("DELETE", PATH_WALLPAPERS)
 
     # --- INI files ---
-    async def async_get_inis(self) -> dict:
+    async def async_get_inis(self) -> dict[str, Any]:
         """Return a list of MiSTer.ini profiles and the active index."""
         return await self._request("GET", PATH_INIS) or {}
 
-    async def async_get_ini_values(self, ini_id: int) -> dict:
+    async def async_get_ini_values(self, ini_id: int) -> dict[str, Any]:
         """Return all key/value pairs for INI profile *ini_id*."""
         return await self._request("GET", f"{PATH_INIS}/{ini_id}") or {}
 
@@ -416,7 +417,7 @@ class MisterClient:
         """Switch the active MiSTer.ini profile to *ini_id*."""
         await self._request("PUT", PATH_INIS, payload={"ini": ini_id})
 
-    async def async_set_ini_values(self, ini_id: int, values: dict) -> None:
+    async def async_set_ini_values(self, ini_id: int, values: dict[str, Any]) -> None:
         """Update key/value pairs in INI profile *ini_id*."""
         await self._request("PUT", f"{PATH_INIS}/{ini_id}", payload=values)
 
@@ -449,7 +450,7 @@ class MisterClient:
         await self._request("POST", f"{PATH_MUSIC_PLAYBACK}/{_seg(mode)}")
 
     # --- Scripts ---
-    async def async_get_scripts(self) -> dict:
+    async def async_get_scripts(self) -> dict[str, Any]:
         """Return the list of user scripts available on the MiSTer."""
         return await self._request("GET", PATH_SCRIPTS_LIST) or {}
 
@@ -466,10 +467,10 @@ class MisterClient:
         await self._request("POST", PATH_SCRIPTS_KILL)
 
     # --- Peers ---
-    async def async_get_peers(self) -> list[dict]:
+    async def async_get_peers(self) -> list[dict[str, Any]]:
         """Return the list of mrext Remote peers on the local network."""
         data = await self._request("GET", PATH_PEERS) or {}
-        return data.get("peers", [])
+        return data.get("peers", [])  # type: ignore[no-any-return]
 
     # --- Launchers ---
     async def async_launch_path(self, path: str) -> None:
@@ -487,7 +488,7 @@ class MisterClient:
 
     async def async_create_shortcut(
         self, game_path: str, folder: str, name: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Create a game shortcut in the Favourites/Recents folder.
 
         Args:
@@ -498,11 +499,14 @@ class MisterClient:
         Returns:
             A dict describing the created shortcut entry.
         """
-        return await self._request(
-            "POST",
-            PATH_LAUNCH_NEW,
-            payload={"gamePath": game_path, "folder": folder, "name": name},
-        ) or {}
+        return (
+            await self._request(
+                "POST",
+                PATH_LAUNCH_NEW,
+                payload={"gamePath": game_path, "folder": folder, "name": name},
+            )
+            or {}
+        )
 
     # --- Raw keyboard ---
     async def async_send_keyboard_raw(self, code: int) -> None:
@@ -513,17 +517,17 @@ class MisterClient:
         await self._request("POST", f"{PATH_KEYBOARD_RAW}/{code}")
 
     # --- Remote >= 0.5 ---
-    async def async_get_screen(self) -> dict:
+    async def async_get_screen(self) -> dict[str, Any]:
         """Return the current framebuffer resolution ``{width, height}``."""
         return await self._request("GET", PATH_SCREEN) or {}
 
-    async def async_get_playlog_status(self) -> dict:
+    async def async_get_playlog_status(self) -> dict[str, Any]:
         """PlayLog state: ``{installed, running, database, recents, startup}``."""
         return await self._request("GET", PATH_PLAYLOG_STATUS) or {}
 
     async def async_get_playlog_summary(
         self, *, top: int | None = None, days: int | None = None
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Play-time summary: totals (seconds), streaks, top games/systems, per-day."""
         params = "&".join(
             f"{k}={v}" for k, v in (("top", top), ("days", days)) if v is not None
@@ -533,7 +537,7 @@ class MisterClient:
 
     async def async_get_playlog_games(
         self, *, sort: str | None = None, limit: int | None = None, offset: int = 0
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Per-game play stats ``{"games": [...], "total"}``."""
         params = [f"offset={offset}"]
         if sort:
@@ -541,17 +545,16 @@ class MisterClient:
         if limit:
             params.append(f"limit={limit}")
         return (
-            await self._request("GET", f"{PATH_PLAYLOG_GAMES}?{'&'.join(params)}")
-            or {}
+            await self._request("GET", f"{PATH_PLAYLOG_GAMES}?{'&'.join(params)}") or {}
         )
 
     async def async_get_playlog_sessions(
         self, *, limit: int | None = None, offset: int = 0
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Recent play sessions ``{"sessions": [...], "total"}``."""
         params = f"offset={offset}" + (f"&limit={limit}" if limit else "")
         return await self._request("GET", f"{PATH_PLAYLOG_SESSIONS}?{params}") or {}
 
     async def async_get_remote_log(self) -> bytes:
         """Download the Remote service log."""
-        return await self._request("GET", PATH_REMOTE_LOG, parse_json=False)
+        return await self._request("GET", PATH_REMOTE_LOG, parse_json=False)  # type: ignore[no-any-return]

@@ -1,4 +1,5 @@
 """Tests for the RA debug-log parser and gamepad argument checks."""
+
 from __future__ import annotations
 
 import pytest
@@ -21,15 +22,23 @@ RA: --- Game Unload ---
 def test_parse_ra_log_events():
     events = parse_ra_log(LOG)
     assert [e["type"] for e in events] == [
-        "login", "game_identified", "achievement", "leaderboard",
-        "game_completed", "game_unload",
+        "login",
+        "game_identified",
+        "achievement",
+        "leaderboard",
+        "game_completed",
+        "game_unload",
     ]
     assert events[0] == {
-        "type": "login", "user": "hudson",
-        "hardcore_points": 1200, "softcore_points": 30,
+        "type": "login",
+        "user": "hudson",
+        "hardcore_points": 1200,
+        "softcore_points": 30,
     }
     assert events[1] == {
-        "type": "game_identified", "game_id": 228, "title": "Super Mario World",
+        "type": "game_identified",
+        "game_id": 228,
+        "title": "Super Mario World",
     }
     assert events[2]["id"] == 4874
     assert events[2]["title"] == "I'm a Big Boy Now"

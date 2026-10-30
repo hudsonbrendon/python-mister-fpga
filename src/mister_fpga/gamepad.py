@@ -6,23 +6,37 @@ core, the menu and MiSTer_SAM — unlike mrext's keyboard API, which only sends
 keys.  It serves one WebSocket client at a time and releases everything held
 when that client disconnects, so this client connects per call.
 """
+
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 import json
 import logging
-from typing import Any
+from typing import Any, TypeVar
 
 import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
+_T = TypeVar("_T")
 
 DEFAULT_GAMEPAD_PORT = 9191
 DEFAULT_GAMEPAD_PATH = "/remote/v1"
 
 GAMEPAD_BUTTONS = (
-    "a", "b", "x", "y", "l", "r", "select", "start", "home",
-    "up", "down", "left", "right",
+    "a",
+    "b",
+    "x",
+    "y",
+    "l",
+    "r",
+    "select",
+    "start",
+    "home",
+    "up",
+    "down",
+    "left",
+    "right",
 )
 GAMEPAD_ACTIONS = ("tap", "down", "up")
 
@@ -56,7 +70,9 @@ class MisterGamepad:
         self._session = session
         self._timeout = timeout
 
-    async def _with_session(self, func):
+    async def _with_session(
+        self, func: Callable[[aiohttp.ClientSession], Awaitable[_T]]
+    ) -> _T:
         if self._session is not None:
             return await func(self._session)
         async with aiohttp.ClientSession() as session:
@@ -76,19 +92,20 @@ class MisterGamepad:
 
         return await self._with_session(_probe)
 
-    async def async_send(self, *commands: dict[str, Any]) -> list[dict]:
+    async def async_send(self, *commands: dict[str, Any]) -> list[dict[str, Any]]:
         """Send raw daemon commands over one connection and return the replies.
 
         Raises:
             MisterGamepadError: On connection failure or an ``ok: false`` reply.
         """
 
-        async def _run(session: aiohttp.ClientSession) -> list[dict]:
+        async def _run(session: aiohttp.ClientSession) -> list[dict[str, Any]]:
             replies = []
             try:
-                async with asyncio.timeout(self._timeout), session.ws_connect(
-                    self.url
-                ) as ws:
+                async with (
+                    asyncio.timeout(self._timeout),
+                    session.ws_connect(self.url) as ws,
+                ):
                     await ws.receive_json(timeout=self._timeout)  # hello
                     for command in commands:
                         await ws.send_str(json.dumps(command))
