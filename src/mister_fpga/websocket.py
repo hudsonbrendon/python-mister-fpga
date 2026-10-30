@@ -1,10 +1,11 @@
 """WebSocket client for real-time MiSTer Remote updates."""
+
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+import logging
 
 import aiohttp
 
@@ -110,8 +111,12 @@ def apply_ws_message(
             return replace(status, core=core), menu_path, index_state
         return (
             replace(
-                status, core=core, system=None, system_name=None,
-                game=None, game_name=None,
+                status,
+                core=core,
+                system=None,
+                system_name=None,
+                game=None,
+                game_name=None,
             ),
             menu_path,
             index_state,
@@ -174,7 +179,7 @@ class MisterWebSocketClient:
 
     async def listen(
         self,
-        on_message: Callable[[str], None | Awaitable[None]],
+        on_message: Callable[[str], Awaitable[None] | None],
     ) -> None:
         """Run the reconnect loop, calling *on_message* for each TEXT frame.
 
@@ -194,7 +199,7 @@ class MisterWebSocketClient:
                         async for msg in ws:
                             if msg.type == aiohttp.WSMsgType.TEXT:
                                 result = on_message(msg.data)
-                                if hasattr(result, "__await__"):
+                                if isinstance(result, Awaitable):
                                     await result
                             elif msg.type in (
                                 aiohttp.WSMsgType.CLOSED,
@@ -206,7 +211,7 @@ class MisterWebSocketClient:
                 finally:
                     self._ws = None
                 if self._stop:
-                    break
+                    break  # type: ignore[unreachable]
                 await asyncio.sleep(self._reconnect_delay)
         finally:
             if owns:
@@ -228,9 +233,10 @@ class MisterWebSocketClient:
         Raises:
             ConnectionError: If not connected.
         """
-        if not self.connected:
+        ws = self._ws
+        if ws is None or ws.closed:
             raise ConnectionError("MiSTer WebSocket is not connected")
-        await self._ws.send_str(message)
+        await ws.send_str(message)
 
     def stop(self) -> None:
         """Signal the :meth:`listen` loop to exit after the current iteration."""

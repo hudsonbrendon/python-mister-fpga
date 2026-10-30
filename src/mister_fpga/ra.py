@@ -1,36 +1,46 @@
 """RetroAchievements local control over SSH (best-effort)."""
+
 from __future__ import annotations
 
 import logging
 import re
 import shlex
+from typing import Any
 
 from .const import RA_STATUS_CMD, RA_USERNAME_PLACEHOLDER, MisterRAStatus
+from .ssh import MisterSSH
 
-RA_DEBUG_LOG = "/tmp/ra_debug.log"
+RA_DEBUG_LOG = "/tmp/ra_debug.log"  # noqa: S108
 RA_CFG = "/media/fat/retroachievements.cfg"
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _LOG_PATTERNS = (
-    ("login", re.compile(
-        r"RA: LOGIN OK: (?P<user>.+?) \(hardcore: (?P<hardcore_points>\d+),"
-        r" softcore: (?P<softcore_points>\d+)\)"
-    )),
+    (
+        "login",
+        re.compile(
+            r"RA: LOGIN OK: (?P<user>.+?) \(hardcore: (?P<hardcore_points>\d+),"
+            r" softcore: (?P<softcore_points>\d+)\)"
+        ),
+    ),
     ("game_id", re.compile(r"RA:\s+ID: (?P<game_id>\d+)")),
     ("game_title", re.compile(r"RA:\s+Title: (?P<title>.+)")),
-    ("achievement", re.compile(
-        r"RA: \*\*\* ACHIEVEMENT TRIGGERED: \[(?P<id>\d+)\] (?P<title>.+?)"
-        r"(?: [—-] (?P<description>.*?))?(?: \*\*\*)?$"
-    )),
-    ("leaderboard", re.compile(
-        r"RA: LEADERBOARD SUBMITTED: \[(?P<id>\d+)\] (?P<title>.+)"
-    )),
+    (
+        "achievement",
+        re.compile(
+            r"RA: \*\*\* ACHIEVEMENT TRIGGERED: \[(?P<id>\d+)\] (?P<title>.+?)"
+            r"(?: [—-] (?P<description>.*?))?(?: \*\*\*)?$"
+        ),
+    ),
+    (
+        "leaderboard",
+        re.compile(r"RA: LEADERBOARD SUBMITTED: \[(?P<id>\d+)\] (?P<title>.+)"),
+    ),
     ("game_completed", re.compile(r"RA: \*\*\* GAME COMPLETED! \*\*\*")),
     ("game_unload", re.compile(r"RA: --- Game Unload ---")),
 )
 
 
-def parse_ra_log(text: str) -> list[dict]:
+def parse_ra_log(text: str) -> list[dict[str, Any]]:
     """Turn ``/tmp/ra_debug.log`` lines into events.
 
     odelot's Main only writes this log with ``debug=1`` in
@@ -43,7 +53,7 @@ def parse_ra_log(text: str) -> list[dict]:
         ``achievement``, ``leaderboard``, ``game_completed``, ``game_unload``)
         plus the captured fields; numeric fields are ints.
     """
-    events: list[dict] = []
+    events: list[dict[str, Any]] = []
     for raw in text.splitlines():
         line = _ANSI.sub("", raw).strip()
         for kind, pattern in _LOG_PATTERNS:
@@ -63,6 +73,7 @@ def parse_ra_log(text: str) -> list[dict]:
                 events.append({"type": kind, **data})
             break
     return events
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,7 +123,7 @@ class MisterRAError(Exception):
 class MisterRA:
     """RetroAchievements local control sharing a MisterSSH connection."""
 
-    def __init__(self, ssh) -> None:
+    def __init__(self, ssh: MisterSSH) -> None:
         self._ssh = ssh
 
     async def async_status(self) -> MisterRAStatus | None:
@@ -125,16 +136,19 @@ class MisterRA:
         return parse_ra_status(out)
 
     async def async_cores_on(self) -> None:
+        """Enable RetroAchievements in the supported cores."""
         await self._run_checked("bash /media/fat/Scripts/.ra/ra_on.sh")
 
     async def async_cores_off(self) -> None:
+        """Disable RetroAchievements in the supported cores."""
         await self._run_checked("bash /media/fat/Scripts/.ra/ra_off.sh")
 
     async def async_set_hardcore(self, enabled: bool) -> None:
+        """Turn hardcore mode on or off."""
         arg = "on" if enabled else "off"
         await self._run_checked(f"bash /media/fat/Scripts/.ra/ra_hardcore.sh {arg}")
 
-    async def async_read_log(self, offset: int = 0) -> tuple[int, list[dict]]:
+    async def async_read_log(self, offset: int = 0) -> tuple[int, list[dict[str, Any]]]:
         """Read new RA log events written since *offset*.
 
         Returns:

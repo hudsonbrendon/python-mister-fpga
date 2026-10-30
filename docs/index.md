@@ -21,11 +21,13 @@ pip install python-mister-fpga
 import asyncio
 from mister_fpga import MisterClient
 
+
 async def main():
     client = MisterClient("192.168.1.50")
     status = await client.async_get_status()
     print(status.core, status.game)
     await client.async_close()
+
 
 asyncio.run(main())
 ```

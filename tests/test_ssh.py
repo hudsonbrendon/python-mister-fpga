@@ -1,4 +1,5 @@
 """Tests for the optional SSH telemetry parsing."""
+
 from __future__ import annotations
 
 import pytest

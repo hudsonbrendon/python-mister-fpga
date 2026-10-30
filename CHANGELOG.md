@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Tooling: hatchling>=1.27, PEP 639 license metadata, PEP 735 `[dependency-groups]`
+  with `uv.lock`, ruff `select = ["ALL"]`, mypy strict, pytest-cov/pytest-timeout,
+  Python 3.14 classifier. CI runs on uv (`uv sync --frozen`), release builds with
+  `uv build` and publishes via trusted publishing. `__version__` now comes from
+  `importlib.metadata`. The `aiohttp<3.14` pin is now test-only (aioresponses
+  0.7.9 is not compatible with aiohttp 3.14).
+
 ## 0.3.2
 - WebSocket reducer: a launch from the menu emits `gameRunning` before `coreRunning`; the core update no longer wipes that game. Only a switch from another core clears the stale game/system.
 

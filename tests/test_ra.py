@@ -1,4 +1,5 @@
 """Tests for the RetroAchievements local module."""
+
 import pytest
 
 from mister_fpga.const import RA_SUPPORTED_SYSTEMS, MisterRAStatus

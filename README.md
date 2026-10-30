@@ -29,12 +29,14 @@ pip install python-mister-fpga
 import asyncio
 from mister_fpga import MisterClient
 
+
 async def main():
     client = MisterClient("192.168.1.50")
     status = await client.async_get_status()
     print(status.core, status.game)
     await client.async_launch_game("/media/fat/games/SNES/Chrono.sfc")
     await client.async_close()
+
 
 asyncio.run(main())
 ```
@@ -49,14 +51,19 @@ state = MisterStatus(online=True)
 menu_path = None
 index_state = (False, False)
 
+
 def on_message(text: str) -> None:
     global state, menu_path, index_state
-    state, menu_path, index_state = apply_ws_message(text, state, menu_path, index_state)
+    state, menu_path, index_state = apply_ws_message(
+        text, state, menu_path, index_state
+    )
     print(state.core, state.game)
+
 
 async def main():
     ws = MisterWebSocketClient("192.168.1.50")
     await ws.listen(on_message)
+
 
 asyncio.run(main())
 ```
@@ -67,11 +74,13 @@ asyncio.run(main())
 import asyncio
 from mister_fpga import MisterSSH
 
+
 async def main():
     ssh = MisterSSH("192.168.1.50", 22, "root", "1")
     data = await ssh.async_probe()
     print(data)
     await ssh.async_close()
+
 
 asyncio.run(main())
 ```
@@ -82,7 +91,7 @@ asyncio.run(main())
 data = await ssh.async_probe()
 data["cmd_fifo_pending"]  # >0 on two probes in a row: Main is hung
 data["volume"], data["muted"], data["game_id"], data["sam_game"]
-await ssh.async_set_volume(5)          # 0-7, never blocks on a hung Main
+await ssh.async_set_volume(5)  # 0-7, never blocks on a hung Main
 await ssh.async_send_command("load_core /media/fat/menu.rbf")
 ```
 
@@ -92,7 +101,7 @@ await ssh.async_send_command("load_core /media/fat/menu.rbf")
 from mister_fpga import MisterGamepad
 
 pad = MisterGamepad("192.168.1.50")
-await pad.async_press("start")         # a real controller press: works in cores, menu, SAM
+await pad.async_press("start")  # a real controller press: works in cores, menu, SAM
 ```
 
 ### RetroAchievements events (odelot Main with `debug=1`)
@@ -101,7 +110,9 @@ await pad.async_press("start")         # a real controller press: works in cores
 from mister_fpga import MisterRA
 
 ra = MisterRA(ssh)
-offset, events = await ra.async_read_log(0)   # login / game_identified / achievement / ...
+offset, events = await ra.async_read_log(
+    0
+)  # login / game_identified / achievement / ...
 ```
 
 ## RetroAchievements cloud stats
@@ -112,11 +123,13 @@ offset, events = await ra.async_read_log(0)   # login / game_identified / achiev
 import asyncio
 from mister_fpga import MisterRAWeb
 
+
 async def main():
     web = MisterRAWeb("myuser", "my_api_key")
     stats = await web.async_fetch_stats()
     print(stats.hardcore_points, stats.rank, stats.current_game)
     await web.async_close()
+
 
 asyncio.run(main())
 ```

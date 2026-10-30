@@ -1,4 +1,5 @@
 """Tests for the MiSTer FPGA WebSocket message parsing."""
+
 from __future__ import annotations
 
 from mister_fpga.client import MisterStatus
@@ -93,8 +94,12 @@ def test_game_running_arcade_has_no_slash():
 
 def test_core_change_clears_stale_system():
     status = MisterStatus(
-        online=True, core="SNES", system="SNES", system_name="SNES",
-        game="SNES/a.sfc", game_name="a",
+        online=True,
+        core="SNES",
+        system="SNES",
+        system_name="SNES",
+        game="SNES/a.sfc",
+        game_name="a",
     )
     new, _, _ = apply_ws_message("coreRunning:GBA", status, None, (False, False))
     assert new.core == "GBA"

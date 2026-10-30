@@ -1,4 +1,5 @@
 """Protocol constants for the MiSTer FPGA mrext Remote API."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ PATH_SCRIPTS_CONSOLE = "/scripts/console"
 PATH_SCRIPTS_KILL = "/scripts/kill"
 PATH_PEERS = "/settings/remote/peers"
 PATH_LAUNCH = "/launch"
-PATH_LAUNCH_TOKEN = "/l"
+PATH_LAUNCH_TOKEN = "/l"  # noqa: S105
 PATH_LAUNCH_NEW = "/launch/new"
 PATH_KEYBOARD_RAW = "/controls/keyboard-raw"
 PATH_SEARCH_SYSTEMS = "/games/search/systems"
@@ -78,7 +79,7 @@ CMD_FIFO = "/dev/MiSTer_cmd"
 
 # Bytes waiting unread in the command FIFO (FIONREAD does not consume them).
 FIFO_PENDING_CMD = (
-    "[ -p " + CMD_FIFO + " ] && python3 -c \"import os,fcntl,termios,struct;"
+    "[ -p " + CMD_FIFO + ' ] && python3 -c "import os,fcntl,termios,struct;'
     "f=os.open('" + CMD_FIFO + "',os.O_RDONLY|os.O_NONBLOCK);"
     "print(struct.unpack('i',fcntl.ioctl(f,termios.FIONREAD,bytes(4)))[0])\""
 )
@@ -91,7 +92,8 @@ SSH_PROBE_CMD = (
     "cat /proc/loadavg 2>/dev/null; echo '|||'; "
     "awk '/MemTotal|MemAvailable/{print $2}' /proc/meminfo 2>/dev/null; echo '|||'; "
     "stat -c %Y /media/fat/MiSTer 2>/dev/null; echo '|||'; "
-    + FIFO_PENDING_CMD + " 2>/dev/null; echo '|||'; "
+    + FIFO_PENDING_CMD
+    + " 2>/dev/null; echo '|||'; "
     "P=$(pidof MiSTer 2>/dev/null | cut -d' ' -f1); "
     "[ -n \"$P\" ] && ls /proc/$P/fd 2>/dev/null | wc -l; echo '|||'; "
     "od -An -tu1 -N1 /media/fat/config/Volume.dat 2>/dev/null; echo '|||'; "
@@ -102,18 +104,50 @@ SSH_PROBE_CMD = (
 
 # Keyboard control names accepted by POST /controls/keyboard/{name}
 KEYBOARD_NAMES = (
-    "up", "down", "left", "right", "confirm", "back", "cancel", "menu",
-    "osd", "core_select", "user", "volume_up", "volume_down", "volume_mute",
-    "reset", "screenshot", "raw_screenshot", "console", "exit_console",
-    "computer_osd", "change_background", "pair_bluetooth", "toggle_core_dates",
+    "up",
+    "down",
+    "left",
+    "right",
+    "confirm",
+    "back",
+    "cancel",
+    "menu",
+    "osd",
+    "core_select",
+    "user",
+    "volume_up",
+    "volume_down",
+    "volume_mute",
+    "reset",
+    "screenshot",
+    "raw_screenshot",
+    "console",
+    "exit_console",
+    "computer_osd",
+    "change_background",
+    "pair_bluetooth",
+    "toggle_core_dates",
 )
 
 # RetroAchievements (local, via SSH helper scripts) ------------------------
 
 # mrext system keys for cores with odelot RA-modified builds.
 RA_SUPPORTED_SYSTEMS = (
-    "NES", "FDS", "SNES", "MegaDrive", "SMS", "Gameboy", "N64", "PSX",
-    "GBA", "MegaCD", "NeoGeo", "TurboGrafx16", "Atari2600", "Atari7800", "S32X",
+    "NES",
+    "FDS",
+    "SNES",
+    "MegaDrive",
+    "SMS",
+    "Gameboy",
+    "N64",
+    "PSX",
+    "GBA",
+    "MegaCD",
+    "NeoGeo",
+    "TurboGrafx16",
+    "Atari2600",
+    "Atari7800",
+    "S32X",
 )
 
 # Placeholder written by the RA installer before the user fills credentials.
@@ -125,7 +159,7 @@ RA_STATUS_CMD = (
     "if [ -d /media/fat/_RA_Cores ]; then echo installed=1; "
     "else echo installed=0; fi; "
     "echo \"username=$(sed -n 's/^username=//p' "
-    "/media/fat/retroachievements.cfg 2>/dev/null | head -1)\"; "
+    '/media/fat/retroachievements.cfg 2>/dev/null | head -1)"; '
     "bash /media/fat/Scripts/.ra/ra_status.sh 2>/dev/null"
 )
 
